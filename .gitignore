@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+dist/
+*.onnx
+*.zip
+.vscode/
+.idea/
