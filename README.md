@@ -12,7 +12,7 @@ Elle part de ce que l'on a souvent sous la main après une enquête de terrain :
 |---|---|
 | Points → emprises | Une emprise par point de terrain, avec SAM. Les points voisins servent d'exemples négatifs pour ne pas fusionner deux bâtiments. |
 | Clic | Un clic au centre d'un toit ajoute son emprise ; clic droit pour annuler. Sert à compléter les points restés sans emprise. |
-| Automatique | Détection sans points, sur une emprise, avec n'importe quel modèle de segmentation ONNX au format [Deepness](https://qgis-plugin-deepness.readthedocs.io/). |
+| Automatique | Détection sans points, sur une emprise, avec le modèle BatiScan Sahel ou tout modèle de segmentation ONNX au format [Deepness](https://qgis-plugin-deepness.readthedocs.io/). |
 | Contrôle | Compare points et emprises : taux de couverture, emprises sans point, emprises qui regroupent plusieurs points. |
 | Entraînement | Exporte des vignettes image + masque (GeoTIFF) à partir d'emprises vérifiées, pour entraîner un modèle propre à votre zone. |
 | Modèles | Téléchargement des modèles, ajout d'un modèle .onnx personnel, choix CPU/GPU. |
@@ -31,6 +31,24 @@ Essai sur 300 bâtiments relevés à Dandougou (Mali), avec l'imagerie satellite
 - 181 emprises de fiabilité haute, 39 moyenne, 46 faible, 8 échecs.
 
 Les emprises de fiabilité faible sont à relire : il arrive qu'elles prennent une cour ou un bout de piste. Le modèle générique « RAMP » de Deepness, essayé sur la même zone, retrouve beaucoup moins de bâtiments (de l'ordre de 12 % des points à 0,5 m/pixel et 45 % à 0,3 m/pixel). D'où l'onglet Entraînement.
+
+## Détection automatique, sans points
+
+Depuis la version 0.2.0, l'extension propose le modèle « BatiScan Sahel v1 », qui détecte les bâtiments sur l'image seule. Il a été entraîné à partir de 9 726 points relevés dans 4 villages du sud du Mali (Baba, Dandougou, Dialakoro, Niagassoba), transformés en emprises par SAM, sur les images Google et Bing à 30 cm/pixel. C'est un U-Net (encodeur ResNet-34) à trois classes : fond, intérieur et contour de bâtiment. La classe contour sert à séparer les bâtiments accolés.
+
+Le test porte sur Doumanani, un village tenu à l'écart de l'entraînement. La détection n'utilise aucun point ; les 778 points relevés servent seulement à mesurer le résultat.
+
+| Image | Points retrouvés | Emprises détectées | Durée (village entier, CPU) |
+|---|---|---|---|
+| Google | 92,2 % | 1 250 | 15 s |
+| Bing | 75,4 % | 857 | 16 s |
+| Esri (zoom 17, environ 1,2 m/px) | 81,1 % | 913 | 16 s |
+
+Un peu plus de la moitié des emprises détectées contiennent un point relevé. À l'image, une bonne partie des autres sont des bâtiments que le relevé n'a pas comptés (annexes, cuisines, greniers), mais une partie sont des erreurs : ce chiffre ne mesure donc pas exactement la précision.
+
+Limites constatées sur des zones sans points : le modèle reconnaît le bâti des villes (Koutiala, Djenné) mais manque les grands bâtiments (hangars, édifices publics) et découpe les grands toits plats en banco. Il n'a vu que des villages : des exemples urbains sont nécessaires pour une version suivante.
+
+Le dossier [`entrainement/`](entrainement/LISEZMOI.md) contient la chaîne complète pour entraîner un modèle sur votre propre zone à partir de vos points.
 
 ## Installation
 
@@ -79,7 +97,8 @@ Réglages utiles : la résolution de travail (0,3 m/px convient aux fonds Google
 |---|---|---|---|
 | MobileSAM quantifié | points et clic | 11 Mo | Apache-2.0 |
 | SAM ViT-B quantifié | points et clic, plus précis et plus lent | 75 Mo | Apache-2.0 |
-| Bâtiments RAMP (Deepness) | détection automatique | 82 Mo | voir le Model ZOO de Deepness |
+| BatiScan Sahel v1 | détection automatique, bâti rural sahélien | 98 Mo | recherche et tests, non commercial |
+| Bâtiments RAMP (Deepness) | détection automatique, générique | 82 Mo | voir le Model ZOO de Deepness |
 
 Les modèles SAM viennent de [vietanhdev/segment-anything-onnx-models](https://huggingface.co/vietanhdev/segment-anything-onnx-models). Tout modèle de segmentation ONNX contenant les métadonnées Deepness (`model_type`, `class_names`, `resolution`, `tiles_size`, `seg_thresh`...) peut être ajouté depuis l'onglet Modèles.
 

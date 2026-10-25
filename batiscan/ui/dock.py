@@ -329,9 +329,10 @@ class DockBatiScan(QDockWidget):
     def _onglet_auto(self):
         w = QWidget()
         f = QFormLayout(w)
-        aide = QLabel("Détection sans points sur une emprise, avec un modèle de segmentation ONNX "
-                      "(format Deepness). Le modèle RAMP fourni est générique : pour le bâti rural "
-                      "sahélien, entraînez votre propre modèle (onglet Entraînement).")
+        aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan Sahel v1 » a été "
+                      "entraîné sur des villages du sud du Mali (Google et Bing, 30 cm/px). Il est moins "
+                      "bon sur le bâti urbain dense et les grands bâtiments. Tout modèle ONNX au format "
+                      "Deepness peut aussi être ajouté (onglet Modèles).")
         aide.setWordWrap(True)
         f.addRow(aide)
         self.auto_raster = _combo_couche(Qgis.LayerFilter.RasterLayer)

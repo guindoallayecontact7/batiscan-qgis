@@ -58,6 +58,50 @@ def mask_to_geometries(mask, geo, min_pixels=4):
     return geoms
 
 
+def etiqueter(prob, interieur, seuil, croissance=4):
+    """Étiquettes d'instances (int32) à partir des cartes de probabilité.
+
+    Sans carte d'intérieur : une tache = un bâtiment. Avec : les intérieurs
+    servent de graines, qu'on fait croître dans la zone « bâtiment » ; deux
+    bâtiments qui se touchent restent ainsi séparés par leur contour.
+    """
+    plein = (prob >= seuil).astype(np.uint8)
+    if interieur is None:
+        return cv2.connectedComponents(plein, connectivity=8)[1]
+    graines = ((interieur >= seuil) & (plein > 0)).astype(np.uint8)
+    n, lab = cv2.connectedComponents(graines, connectivity=4)
+    lab = lab.astype(np.float32)
+    noyau = np.ones((3, 3), np.uint8)
+    for _ in range(croissance):
+        lib = (lab == 0) & (plein > 0)
+        if not lib.any():
+            break
+        grand = cv2.dilate(lab, noyau)
+        lab[lib] = grand[lib]
+    # parties « bâtiment » sans graine (petits toits) : bâtiments à part
+    reste = ((lab == 0) & (plein > 0)).astype(np.uint8)
+    m, lab2 = cv2.connectedComponents(reste, connectivity=8)
+    lab = lab.astype(np.int32)
+    lab[lab2 > 0] = lab2[lab2 > 0] + n
+    return lab
+
+
+def instances(lab):
+    """Pour chaque étiquette > 0 : (étiquette, lignes, colonnes) de ses pixels."""
+    plat = lab.ravel()
+    ordre = np.argsort(plat, kind="stable")
+    valeurs = plat[ordre]
+    debut = np.searchsorted(valeurs, 1)
+    if debut >= len(valeurs):
+        return
+    cles, pos = np.unique(valeurs[debut:], return_index=True)
+    pos = list(pos + debut) + [len(valeurs)]
+    w = lab.shape[1]
+    for i, k in enumerate(cles):
+        pix = ordre[pos[i]:pos[i + 1]]
+        yield int(k), pix // w, pix % w
+
+
 def _iou(a, b):
     inter = a.intersection(b).area()
     union = a.area() + b.area() - inter

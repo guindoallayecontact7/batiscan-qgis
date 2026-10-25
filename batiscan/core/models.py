@@ -26,6 +26,15 @@ CATALOGUE = [
         "licence": "Apache-2.0",
     },
     {
+        "id": "batiscan_sahel_v1",
+        "nom": "BatiScan Sahel v1 – bâti rural (98 Mo, 30 cm/px)",
+        "type": "segmenteur",
+        "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.2.0/batiscan_sahel_v1.onnx",
+        "fichier": "batiscan_sahel_v1.onnx",
+        "taille_mo": 98,
+        "licence": "recherche et tests, non commercial",
+    },
+    {
         "id": "deepness_ramp",
         "nom": "Bâtiments RAMP – Deepness (82 Mo, 50 cm/px)",
         "type": "segmenteur",
@@ -40,7 +49,9 @@ _CLE_PERSO = "batiscan/modeles_perso"
 
 
 def dossier_modeles():
-    d = os.path.join(QgsApplication.qgisSettingsDirPath(), "batiscan", "modeles")
+    # BATISCAN_MODELES : utile pour les scripts lancés hors de l'interface QGIS
+    d = os.environ.get("BATISCAN_MODELES") or os.path.join(
+        QgsApplication.qgisSettingsDirPath(), "batiscan", "modeles")
     os.makedirs(d, exist_ok=True)
     return d
 

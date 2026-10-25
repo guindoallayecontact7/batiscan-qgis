@@ -4,7 +4,7 @@ qgisMinimumVersion=3.38
 description=AI building footprint mapping: field points to footprints (SAM), click-to-map, automatic detection with ONNX models, quality control and training data export.
 description[fr]=Cartographie des bâtiments par IA : des points de terrain aux emprises (SAM), saisie au clic, détection automatique par modèles ONNX, contrôle qualité et export de jeux d'entraînement.
 about=BatiScan turns building points collected in the field into building footprints using Segment Anything (MobileSAM / SAM ONNX, no PyTorch needed). It also offers a click-to-map tool, automatic detection with any Deepness-compatible ONNX segmentation model, a points-vs-footprints quality report, and export of image/mask tiles to train a model for your own area. Works with GeoTIFF orthophotos and XYZ/WMS basemaps. Requires the Python packages onnxruntime and opencv (installed by the plugin on first use). Designed for rural and peri-urban Sahel settlements (round huts and rectangular roofs).
-version=0.1.0
+version=0.2.0
 author=Allaye GUINDO
 email=guindo.allaye.contact@gmail.com
 homepage=https://github.com/guindoallayecontact7/batiscan-qgis
@@ -16,4 +16,5 @@ experimental=True
 deprecated=False
 hasProcessingProvider=no
 tags=building,buildings,footprint,ai,deep learning,segment anything,sam,onnx,segmentation,remote sensing,africa,sahel,mali,bâtiment
-changelog=0.1.0 - première version : points → emprises, clic, détection automatique, contrôle qualité, export d'entraînement
+changelog=0.2.0 - modèle BatiScan Sahel v1 : détection automatique sans points (bâti rural sahélien), séparation des bâtiments accolés, scripts d entraînement
+    0.1.0 - première version : points → emprises, clic, détection automatique, contrôle qualité, export d entraînement

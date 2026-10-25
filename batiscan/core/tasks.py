@@ -32,7 +32,7 @@ from qgis.PyQt.QtCore import QMetaType, pyqtSignal
 from .point_prompt import Criteres, segmenter_point
 from .sam_onnx import SamOnnx
 from .segmenter import OnnxSegmenter
-from .vectorize import mask_to_geometries, regularize
+from .vectorize import etiqueter, instances, mask_to_geometries, regularize
 
 FIABILITE = {"direct": "haute", "coins": "moyenne", "recherche": "faible", "interactif": "haute"}
 
@@ -266,21 +266,19 @@ class TacheAuto(_TacheBase):
             def prog(v, nb=nb):
                 self.setProgress((nb + v / 100.0) * 100.0 / len(blocs))
 
-            prob = seg.probabilites_image(img, prog, self.isCanceled)
-            masque = (prob >= seuil).astype(np.uint8)
-            n, lab, stats, cent = cv2.connectedComponentsWithStats(masque, connectivity=8)
-            for k in range(1, n):
-                cx, cy = cent[k]
-                if not (marge <= cx < marge + bw and marge <= cy < marge + bh):
-                    continue  # traité par le bloc voisin
-                if stats[k, cv2.CC_STAT_AREA] < amin:
+            prob, interieur = seg.probabilites_image(img, prog, self.isCanceled)
+            lab = etiqueter(prob, interieur, seuil)
+            for k, rr, cc in instances(lab):
+                if len(rr) < amin:
                     continue
-                l, t, ww, hh = (stats[k, cv2.CC_STAT_LEFT], stats[k, cv2.CC_STAT_TOP],
-                                stats[k, cv2.CC_STAT_WIDTH], stats[k, cv2.CC_STAT_HEIGHT])
+                if not (marge <= cc.mean() < marge + bw and marge <= rr.mean() < marge + bh):
+                    continue  # traité par le bloc voisin
+                t, l = int(rr.min()), int(cc.min())
+                hh, ww = int(rr.max()) - t + 1, int(cc.max()) - l + 1
                 sub = np.zeros((hh + 2, ww + 2), bool)
-                sub[1:-1, 1:-1] = lab[t:t + hh, l:l + ww] == k
+                sub[rr - t + 1, cc - l + 1] = True
                 geo = (x0 + (l - 1) * step, y0 - (t - 1) * step, step, step)
-                proba = float(prob[t:t + hh, l:l + ww][sub[1:-1, 1:-1]].mean())
+                proba = float(prob[rr, cc].mean())
                 for geom in mask_to_geometries(sub, geo):
                     geom, forme = regularize(geom, p["regularisation"], tolerance=step)
                     geom.transform(self.tr)
@@ -290,8 +288,29 @@ class TacheAuto(_TacheBase):
                                      round(proba, 3), forme, round(da.measureArea(geom), 1),
                                      self.source.name, aujourdhui])
                     feats.append(f)
-        self.resultats = feats
+        self.resultats = _sans_enceintes(feats)
         return True
+
+
+def _sans_enceintes(feats, min_inclus=2):
+    """Retire les formes qui englobent plusieurs autres détections.
+
+    Le modèle trace parfois le mur d'enceinte d'une concession en plus des
+    toits qu'elle contient : cette grande forme n'est pas un bâtiment.
+    """
+    index = QgsSpatialIndex()
+    for i, f in enumerate(feats):
+        f.setId(i)
+        index.addFeature(f)
+    centres = [f.geometry().pointOnSurface() for f in feats]
+    garder = []
+    for i, f in enumerate(feats):
+        g = f.geometry()
+        inclus = sum(1 for j in index.intersects(g.boundingBox())
+                     if j != i and feats[j].geometry().area() < 0.5 * g.area() and g.contains(centres[j]))
+        if inclus < min_inclus:
+            garder.append(f)
+    return garder
 
 
 # --------------------------------------------------------------------------

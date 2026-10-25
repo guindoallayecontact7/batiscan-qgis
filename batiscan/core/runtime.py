@@ -1,5 +1,6 @@
 """Sessions onnxruntime partagées (un modèle n'est chargé qu'une fois)."""
 
+import os
 import threading
 
 _cache = {}
@@ -26,6 +27,9 @@ def session(path, use_gpu=True):
         if key not in _cache:
             opts = ort.SessionOptions()
             opts.log_severity_level = 3
+            threads = int(os.environ.get("BATISCAN_THREADS", "0"))
+            if threads > 0:
+                opts.intra_op_num_threads = threads
             _cache[key] = ort.InferenceSession(str(path), sess_options=opts, providers=providers(use_gpu))
         return _cache[key]
 
