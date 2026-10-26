@@ -273,11 +273,11 @@ class TacheAuto(_TacheBase):
                     continue
                 if not (marge <= cc.mean() < marge + bw and marge <= rr.mean() < marge + bh):
                     continue  # traité par le bloc voisin
-                t, l = int(rr.min()), int(cc.min())
-                hh, ww = int(rr.max()) - t + 1, int(cc.max()) - l + 1
+                haut, gauche = int(rr.min()), int(cc.min())
+                hh, ww = int(rr.max()) - haut + 1, int(cc.max()) - gauche + 1
                 sub = np.zeros((hh + 2, ww + 2), bool)
-                sub[rr - t + 1, cc - l + 1] = True
-                geo = (x0 + (l - 1) * step, y0 - (t - 1) * step, step, step)
+                sub[rr - haut + 1, cc - gauche + 1] = True
+                geo = (x0 + (gauche - 1) * step, y0 - (haut - 1) * step, step, step)
                 proba = float(prob[rr, cc].mean())
                 for geom in mask_to_geometries(sub, geo):
                     geom, forme = regularize(geom, p["regularisation"], tolerance=step)

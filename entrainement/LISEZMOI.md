@@ -7,6 +7,7 @@ Ces scripts transforment des points de bâtiments relevés sur le terrain en un 
 | Étape | Script | Python utilisé |
 |---|---|---|
 | 1. Emprises SAM à partir des points | `01_emprises_sam.py` (ou `lancer_emprises.sh` pour plusieurs villages et fonds) | Python de QGIS |
+| 1 bis. Emprises à partir de polygones existants (TerraLab...) | `01b_polygones.py` | Python de QGIS |
 | 2. Vignettes image + masque | `02_jeu.py` (ou `lancer_jeu.sh`) | Python de QGIS |
 | 3. Entraînement U-Net | `03_entrainer.py` | Python avec PyTorch et GPU |
 | 4. Export ONNX avec métadonnées Deepness | `04_exporter_onnx.py` | Python avec PyTorch |

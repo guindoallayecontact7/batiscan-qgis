@@ -34,19 +34,24 @@ Les emprises de fiabilité faible sont à relire : il arrive qu'elles prennent u
 
 ## Détection automatique, sans points
 
-Depuis la version 0.2.0, l'extension propose le modèle « BatiScan Sahel v1 », qui détecte les bâtiments sur l'image seule. Il a été entraîné à partir de 9 726 points relevés dans 4 villages du sud du Mali (Baba, Dandougou, Dialakoro, Niagassoba), transformés en emprises par SAM, sur les images Google et Bing à 30 cm/pixel. C'est un U-Net (encodeur ResNet-34) à trois classes : fond, intérieur et contour de bâtiment. La classe contour sert à séparer les bâtiments accolés.
+L'extension propose le modèle « BatiScan Sahel v2 », qui détecte les bâtiments sur l'image seule. C'est un U-Net (encodeur ResNet-34) à trois classes : fond, intérieur et contour de bâtiment. La classe contour sert à séparer les bâtiments accolés.
+
+Il a été entraîné sur 9 villages du Mali, à 30 cm/pixel :
+
+- 11 277 points relevés sur le terrain à Baba, Dandougou, Dialakoro, Niagassoba et N'jikouna, transformés en emprises par SAM, sur les images Google et Bing ;
+- 4 949 polygones produits avec le plugin « AI Segmentation » de TerraLab à Aite, Tiemena, Bourdala et Koffing (confiance de 0,5 ou plus), sur l'image Google. Ces polygones ne contiennent presque pas de cases rondes : les zones où le modèle précédent voyait un bâtiment absent des polygones sont exclues de l'entraînement, pour ne pas apprendre les cases comme du fond.
 
 Le test porte sur Doumanani, un village tenu à l'écart de l'entraînement. La détection n'utilise aucun point ; les 778 points relevés servent seulement à mesurer le résultat.
 
-| Image | Points retrouvés | Emprises détectées | Durée (village entier, CPU) |
+| Image | Points retrouvés, v2 | v1 (0.2.0) | Durée (village entier, CPU) |
 |---|---|---|---|
-| Google | 92,2 % | 1 250 | 15 s |
-| Bing | 75,4 % | 857 | 16 s |
-| Esri (zoom 17, environ 1,2 m/px) | 81,1 % | 913 | 16 s |
+| Google | 95,0 % | 92,2 % | 18 s |
+| Bing | 87,7 % | 75,4 % | 19 s |
+| Esri (zoom 17, environ 1,2 m/px) | 84,8 % | 81,2 % | 30 s |
 
-Un peu plus de la moitié des emprises détectées contiennent un point relevé. À l'image, une bonne partie des autres sont des bâtiments que le relevé n'a pas comptés (annexes, cuisines, greniers), mais une partie sont des erreurs : ce chiffre ne mesure donc pas exactement la précision.
+Environ la moitié des emprises détectées contiennent un point relevé. À l'image, une bonne partie des autres sont des bâtiments que le relevé n'a pas comptés (annexes, cuisines, greniers), mais une partie sont des erreurs : ce chiffre ne mesure donc pas exactement la précision.
 
-Limites constatées sur des zones sans points : le modèle reconnaît le bâti des villes (Koutiala, Djenné) mais manque les grands bâtiments (hangars, édifices publics) et découpe les grands toits plats en banco. Il n'a vu que des villages : des exemples urbains sont nécessaires pour une version suivante.
+Sur des zones sans points, v2 détecte mieux que v1 les grands toits (hangars à Koutiala) et le bâti dense en banco (Djenné). Il trace encore parfois le mur d'enceinte d'une concession comme un bâtiment, et les très grands édifices restent incomplets.
 
 Le dossier [`entrainement/`](entrainement/LISEZMOI.md) contient la chaîne complète pour entraîner un modèle sur votre propre zone à partir de vos points.
 
@@ -97,7 +102,8 @@ Réglages utiles : la résolution de travail (0,3 m/px convient aux fonds Google
 |---|---|---|---|
 | MobileSAM quantifié | points et clic | 11 Mo | Apache-2.0 |
 | SAM ViT-B quantifié | points et clic, plus précis et plus lent | 75 Mo | Apache-2.0 |
-| BatiScan Sahel v1 | détection automatique, bâti rural sahélien | 98 Mo | recherche et tests, non commercial |
+| BatiScan Sahel v2 | détection automatique, bâti rural et bourgs du Sahel | 98 Mo | recherche et tests, non commercial |
+| BatiScan Sahel v1 | ancienne version | 98 Mo | recherche et tests, non commercial |
 | Bâtiments RAMP (Deepness) | détection automatique, générique | 82 Mo | voir le Model ZOO de Deepness |
 
 Les modèles SAM viennent de [vietanhdev/segment-anything-onnx-models](https://huggingface.co/vietanhdev/segment-anything-onnx-models). Tout modèle de segmentation ONNX contenant les métadonnées Deepness (`model_type`, `class_names`, `resolution`, `tiles_size`, `seg_thresh`...) peut être ajouté depuis l'onglet Modèles.

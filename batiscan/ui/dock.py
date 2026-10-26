@@ -330,10 +330,10 @@ class DockBatiScan(QDockWidget):
     def _onglet_auto(self):
         w = QWidget()
         f = QFormLayout(w)
-        aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan Sahel v1 » a été "
-                      "entraîné sur des villages du sud du Mali (Google et Bing, 30 cm/px). Il est moins "
-                      "bon sur le bâti urbain dense et les grands bâtiments. Tout modèle ONNX au format "
-                      "Deepness peut aussi être ajouté (onglet Modèles).")
+        aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan Sahel v2 » a été "
+                      "entraîné sur 9 villages du Mali (Google et Bing, 30 cm/px), des cases rondes aux "
+                      "toits en tôle. Il est moins bon sur les très grands bâtiments. Tout modèle ONNX au "
+                      "format Deepness peut aussi être ajouté (onglet Modèles).")
         aide.setWordWrap(True)
         f.addRow(aide)
         self.auto_raster = _combo_couche(Qgis.LayerFilter.RasterLayer)

@@ -26,8 +26,17 @@ CATALOGUE = [
         "licence": "Apache-2.0",
     },
     {
+        "id": "batiscan_sahel_v2",
+        "nom": "BatiScan Sahel v2 – bâti rural et bourgs (98 Mo, 30 cm/px)",
+        "type": "segmenteur",
+        "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.3.0/batiscan_sahel_v2.onnx",
+        "fichier": "batiscan_sahel_v2.onnx",
+        "taille_mo": 98,
+        "licence": "recherche et tests, non commercial",
+    },
+    {
         "id": "batiscan_sahel_v1",
-        "nom": "BatiScan Sahel v1 – bâti rural (98 Mo, 30 cm/px)",
+        "nom": "BatiScan Sahel v1 – ancienne version (98 Mo, 30 cm/px)",
         "type": "segmenteur",
         "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.2.0/batiscan_sahel_v1.onnx",
         "fichier": "batiscan_sahel_v1.onnx",
