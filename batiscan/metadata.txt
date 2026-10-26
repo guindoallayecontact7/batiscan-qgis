@@ -16,7 +16,7 @@ experimental=True
 deprecated=False
 hasProcessingProvider=no
 tags=building,buildings,footprint,ai,deep learning,segment anything,sam,onnx,segmentation,remote sensing,africa,sahel,mali,bâtiment
-changelog=0.3.0 - modèle BatiScan Sahel v2 entraîné sur 9 villages (95 % des bâtiments retrouvés sur Google, 88 % sur Bing pour le village test), meilleure détection des grands toits ; import de polygones existants pour l'entraînement
+changelog=0.3.0 - modèle BatiScan Sahel v2 entraîné sur 9 villages (95 pour cent des bâtiments retrouvés sur Google, 88 pour cent sur Bing pour le village test), meilleure détection des grands toits ; import de polygones existants pour l'entraînement
     0.2.1 - correctifs pour l'analyse de sécurité de plugins.qgis.org (installation des dépendances via QProcess, ouverture du dossier via QDesktopServices)
     0.2.0 - modèle BatiScan Sahel v1 : détection automatique sans points (bâti rural sahélien), séparation des bâtiments accolés, scripts d'entraînement
     0.1.0 - première version : points → emprises, clic, détection automatique, contrôle qualité, export de jeux d'entraînement
