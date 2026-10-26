@@ -19,6 +19,7 @@ from qgis.core import (
 )
 from qgis.gui import QgsExtentWidget, QgsFileWidget, QgsMapLayerComboBox
 from qgis.PyQt.QtCore import Qt, QUrl
+from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -507,7 +508,7 @@ class DockBatiScan(QDockWidget):
         b2 = QPushButton("Ajouter un modèle .onnx…")
         b2.clicked.connect(self._ajouter_perso)
         b3 = QPushButton("Ouvrir le dossier")
-        b3.clicked.connect(lambda: os.startfile(models.dossier_modeles()) if hasattr(os, "startfile") else None)
+        b3.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(models.dossier_modeles())))
         for b in (b1, b2, b3):
             h.addWidget(b)
         v.addLayout(h)

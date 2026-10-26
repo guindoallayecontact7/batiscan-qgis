@@ -2,8 +2,9 @@
 
 import importlib
 import os
-import subprocess
 import sys
+
+from qgis.PyQt.QtCore import QProcess
 
 REQUIS = {"onnxruntime": "onnxruntime", "cv2": "opencv-python-headless"}
 
@@ -39,8 +40,13 @@ def installer(paquets):
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as f:
         f.write(f"numpy=={numpy.__version__}\n")
         contraintes = f.name
-    cmd = [_python(), "-m", "pip", "install", "--user", "-c", contraintes] + list(paquets)
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    r = subprocess.run(cmd, capture_output=True, text=True, creationflags=flags)
+    # Liste d'arguments fixe (aucune chaîne passée à un shell) ; QProcess
+    # n'ouvre pas de fenêtre de console sous Windows.
+    proc = QProcess()
+    proc.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+    proc.start(_python(), ["-m", "pip", "install", "--user", "-c", contraintes] + list(paquets))
+    proc.waitForFinished(-1)
+    journal = bytes(proc.readAll()).decode("utf-8", errors="replace")
     os.remove(contraintes)
-    return r.returncode == 0, (r.stdout or "") + (r.stderr or "")
+    ok = proc.exitStatus() == QProcess.ExitStatus.NormalExit and proc.exitCode() == 0
+    return ok, journal

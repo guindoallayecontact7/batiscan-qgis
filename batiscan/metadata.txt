@@ -4,7 +4,7 @@ qgisMinimumVersion=3.38
 description=AI building mapping for QGIS: detect building footprints on satellite imagery (no points needed), or turn field-collected building points into footprints with Segment Anything.
 description[fr]=Cartographie des bâtiments par IA dans QGIS : détection automatique des emprises sur image satellite, sans points, ou transformation de points relevés sur le terrain en emprises avec Segment Anything.
 about=BatiScan maps buildings from satellite or aerial imagery with AI. The automatic mode uses the BatiScan Sahel model, a U-Net trained on rural villages of southern Mali (30 cm/px); it separates adjacent buildings and processes a whole village in seconds on a CPU. The model (98 MB) is downloaded on first use and is provided for research and testing, not for commercial use. BatiScan also turns building points collected in the field into footprints with Segment Anything (MobileSAM in ONNX, no PyTorch needed), offers a click-to-map tool, a points-versus-footprints quality report, and export of image/mask tiles to train a model for your own area. Any Deepness-compatible ONNX segmentation model can be added. Works with GeoTIFF orthophotos and XYZ/WMS basemaps (Google, Bing, Esri...). Requires the Python packages onnxruntime and opencv, which the plugin offers to install on first use. Less accurate on dense urban areas and very large buildings.
-version=0.2.0
+version=0.2.1
 author=Allaye GUINDO
 email=guindo.allaye.contact@gmail.com
 homepage=https://github.com/guindoallayecontact7/batiscan-qgis
@@ -16,5 +16,6 @@ experimental=True
 deprecated=False
 hasProcessingProvider=no
 tags=building,buildings,footprint,ai,deep learning,segment anything,sam,onnx,segmentation,remote sensing,africa,sahel,mali,bâtiment
-changelog=0.2.0 - modèle BatiScan Sahel v1 : détection automatique sans points (bâti rural sahélien), séparation des bâtiments accolés, scripts d'entraînement
+changelog=0.2.1 - correctifs pour l'analyse de sécurité de plugins.qgis.org (installation des dépendances via QProcess, ouverture du dossier via QDesktopServices)
+    0.2.0 - modèle BatiScan Sahel v1 : détection automatique sans points (bâti rural sahélien), séparation des bâtiments accolés, scripts d'entraînement
     0.1.0 - première version : points → emprises, clic, détection automatique, contrôle qualité, export de jeux d'entraînement
