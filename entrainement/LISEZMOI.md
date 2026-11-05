@@ -12,6 +12,9 @@ Ces scripts transforment des points de bâtiments relevés sur le terrain en un 
 | 3. Entraînement U-Net | `03_entrainer.py` | Python avec PyTorch et GPU |
 | 4. Export ONNX avec métadonnées Deepness | `04_exporter_onnx.py` | Python avec PyTorch |
 | 5. Détection sur un village test et comparaison aux points | `05_evaluer.py` | Python de QGIS |
+| Recalage de masques décalés sur les prédictions d'un modèle | `06_recaler.py` | Python avec PyTorch |
+| Mesure par village, au pixel et par bâtiment | `07_mesurer.py` | Python avec PyTorch |
+| Repérage des fausses détections sur un jeu | `12_negatifs.py` | Python avec PyTorch |
 
 `00_open_buildings.py` extrait aussi les emprises Google/Microsoft Open Buildings autour des villages, pour comparaison.
 
@@ -27,6 +30,12 @@ La valeur 255 marque les zones ignorées pendant l'entraînement :
 - les grandes formes libres de plus de 250 m².
 
 Seules les vignettes situées à moins de 60 m d'un point sont gardées, pour ne pas apprendre comme « fond » des bâtiments hors de la zone relevée.
+
+## Reprendre un entraînement
+
+`03_entrainer.py` accepte `--init` (poids de départ), `--lr`, `--jeux-sup` (vignettes en plus) et `--sup-seul` (pré-entraînement sur ces seules vignettes). La valeur 3 d'un masque marque du fond que le modèle prend pour du bâti ; `--poids-dur` règle son poids. Le fichier `dernier.pt` garde la fin de l'entraînement, à côté de `meilleur.pt`.
+
+Avant d'apprendre des fausses détections comme du fond, regardez-les : une référence incomplète en contient beaucoup qui sont de vrais toits.
 
 ## Environnement PyTorch sous Windows
 

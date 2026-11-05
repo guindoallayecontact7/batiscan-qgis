@@ -35,7 +35,7 @@ ext = tr.transformBoundingBox(pts.extent())
 ext = ext.buffered(50 * src.units_per_meter(ext.center()))
 t0 = time.time()
 tache = TacheAuto(src, ext, pts.crs(), onnx_path,
-                  {"resolution": res, "seuil": None, "aire_min": 4, "regularisation": "auto", "gpu": True})
+                  {"resolution": res, "seuil": None, "aire_min": 4, "regularisation": "batiment", "gpu": True})
 if not tache.run():
     sys.exit(tache.erreur or "échec")
 duree = time.time() - t0

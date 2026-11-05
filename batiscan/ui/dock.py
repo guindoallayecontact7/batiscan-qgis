@@ -18,6 +18,7 @@ from qgis.core import (
     QgsWkbTypes,
 )
 from qgis.gui import QgsExtentWidget, QgsFileWidget, QgsMapLayerComboBox
+from qgis.PyQt import sip
 from qgis.PyQt.QtCore import Qt, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import (
@@ -77,11 +78,12 @@ def _combo_couche(filtre):
 
 
 def _style_emprises(couche):
-    couleurs = {"haute": "#1a9850", "moyenne": "#fd8d3c", "faible": "#d73027"}
+    couleurs = {"haute": "#1a9850", "moyenne": "#fd8d3c", "faible": "#d73027", "a_verifier": "#7b3294"}
+    noms = {"a_verifier": "à vérifier (même couleur que le sol)"}
     cats = []
     for val, coul in couleurs.items():
         sym = QgsFillSymbol.createSimple({"color": "0,0,0,0", "outline_color": coul, "outline_width": "0.5"})
-        cats.append(QgsRendererCategory(val, sym, val))
+        cats.append(QgsRendererCategory(val, sym, noms.get(val, val)))
     couche.setRenderer(QgsCategorizedSymbolRenderer("fiabilite", cats))
 
 
@@ -242,19 +244,24 @@ class DockBatiScan(QDockWidget):
                   "regularisation": self.pt_reg.currentData(), "gpu": self._gpu()}
         tache = TachePoints(source, points, pts.crs(), ch, params)
         tache._couche_points = pts
+        tache._nom_points = pts.name()  # la couche peut être retirée du projet pendant la tâche
         self._lancer(tache, self._fin_points)
 
     def _fin_points(self, tache):
         if not self._fin_tache(tache):
             return
         pts = tache._couche_points
-        couche = couche_memoire(f"Emprises – {pts.name()}", tache.crs_sortie, "Polygon",
+        nom = tache._nom_points
+        couche = couche_memoire(f"Emprises – {nom}", tache.crs_sortie, "Polygon",
                                 champs_emprises(), tache.resultats)
         _style_emprises(couche)
         QgsProject.instance().addMapLayer(couche)
-        if tache.echecs:
+        if tache.echecs and sip.isdeleted(pts):
+            self._msg(f"La couche « {nom} » a été retirée pendant le traitement : la couche des "
+                      f"{len(tache.echecs)} points sans emprise n'a pas pu être créée.", Qgis.MessageLevel.Warning, 15)
+        elif tache.echecs:
             req = QgsFeatureRequest().setFilterFids(tache.echecs)
-            nt = couche_memoire(f"Points sans emprise – {pts.name()}", pts.crs(),
+            nt = couche_memoire(f"Points sans emprise – {nom}", pts.crs(),
                                 QgsWkbTypes.displayString(pts.wkbType()), pts.fields(), pts.getFeatures(req))
             QgsProject.instance().addMapLayer(nt)
         s = tache.stats
@@ -303,7 +310,8 @@ class DockBatiScan(QDockWidget):
         if self._sam_interactif is None or self._sam_interactif[0] != cle:
             self._sam_interactif = (cle, SourceImage(raster),
                                     SamOnnx(ch["encodeur"], ch["decodeur"], ch.get("canevas", (682, 1024)), self._gpu()))
-        if self._couche_saisie is None or QgsProject.instance().mapLayer(self._couche_saisie.id()) is None:
+        if (self._couche_saisie is None or sip.isdeleted(self._couche_saisie)
+                or QgsProject.instance().mapLayer(self._couche_saisie.id()) is None):
             crs = QgsProject.instance().crs()
             if crs.isGeographic():
                 crs = self._sam_interactif[1].crs
@@ -330,10 +338,12 @@ class DockBatiScan(QDockWidget):
     def _onglet_auto(self):
         w = QWidget()
         f = QFormLayout(w)
-        aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan Sahel v2 » a été "
-                      "entraîné sur 9 villages du Mali (Google et Bing, 30 cm/px), des cases rondes aux "
-                      "toits en tôle. Il est moins bon sur les très grands bâtiments. Tout modèle ONNX au "
-                      "format Deepness peut aussi être ajouté (onglet Modèles).")
+        aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan Sahel v6 » a été "
+                      "entraîné sur des villages du Mali et des emprises ouvertes d'Afrique de l'Ouest "
+                      "(30 cm/px), des cases rondes aux toits en tôle. Les objets de même couleur que le "
+                      "sol sont marqués « à vérifier » : ce sont souvent de vrais bâtiments, à relire sans "
+                      "les supprimer en bloc. Tout modèle ONNX au format Deepness peut aussi être ajouté "
+                      "(onglet Modèles).")
         aide.setWordWrap(True)
         f.addRow(aide)
         self.auto_raster = _combo_couche(Qgis.LayerFilter.RasterLayer)
@@ -350,6 +360,7 @@ class DockBatiScan(QDockWidget):
         self.auto_seuil.setSpecialValueText("celui du modèle")
         self.auto_amin = _spin(6, 0, 200, 1, 0, "m²")
         self.auto_reg = QComboBox()
+        self.auto_reg.addItem("Bâtiment (formes droites, sans superposition)", "batiment")
         for k, t in REGULARISATIONS:
             self.auto_reg.addItem(t, k)
         btn = QPushButton("Lancer la détection")

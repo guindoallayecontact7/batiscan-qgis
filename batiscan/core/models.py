@@ -1,5 +1,6 @@
 """Catalogue des modèles, téléchargement et modèles personnels."""
 
+import hashlib
 import json
 import os
 import zipfile
@@ -26,8 +27,18 @@ CATALOGUE = [
         "licence": "Apache-2.0",
     },
     {
+        "id": "batiscan_sahel_v6",
+        "nom": "BatiScan Sahel v6 – bâti rural et bourgs (98 Mo, 30 cm/px)",
+        "type": "segmenteur",
+        "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.5.0/batiscan_sahel_v6.onnx",
+        "fichier": "batiscan_sahel_v6.onnx",
+        "sha256": "38f1daf1bfce5d55c6e5d4aebc8b0f4e60f5345677ab3c8625816d8854dd8257",
+        "taille_mo": 98,
+        "licence": "recherche et tests, non commercial",
+    },
+    {
         "id": "batiscan_sahel_v2",
-        "nom": "BatiScan Sahel v2 – bâti rural et bourgs (98 Mo, 30 cm/px)",
+        "nom": "BatiScan Sahel v2 – ancienne version (98 Mo, 30 cm/px)",
         "type": "segmenteur",
         "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.3.0/batiscan_sahel_v2.onnx",
         "fichier": "batiscan_sahel_v2.onnx",
@@ -96,8 +107,20 @@ def chemins(modele):
     return {"encodeur": enc, "decodeur": dec, "canevas": canevas}
 
 
+def _empreinte(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for bloc in iter(lambda: f.read(1 << 20), b""):
+            h.update(bloc)
+    return h.hexdigest()
+
+
 def installer_archive(modele, fichier_telecharge):
     """Range le fichier téléchargé dans le dossier du modèle (dézippe si besoin)."""
+    attendu = modele.get("sha256")
+    if attendu and _empreinte(fichier_telecharge) != attendu:
+        os.remove(fichier_telecharge)
+        raise ValueError("le fichier reçu ne correspond pas au modèle publié, il a été supprimé")
     d = os.path.join(dossier_modeles(), modele["id"])
     os.makedirs(d, exist_ok=True)
     if zipfile.is_zipfile(fichier_telecharge):

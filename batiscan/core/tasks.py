@@ -29,6 +29,7 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QMetaType, pyqtSignal
 
+from . import formes
 from .point_prompt import Criteres, segmenter_point
 from .sam_onnx import SamOnnx
 from .segmenter import OnnxSegmenter
@@ -249,6 +250,7 @@ class TacheAuto(_TacheBase):
         H = max(1, math.ceil(self.emprise.height() / step))
         marge = seg.tile // 2
         amin = p["aire_min"] / (res * res)
+        batiment = p["regularisation"] == "batiment"
         da = _mesureur(self.crs_sortie)
         aujourdhui = date.today().isoformat()
         blocs = [(bx, by) for by in range(0, H, self.BLOC) for bx in range(0, W, self.BLOC)]
@@ -280,16 +282,35 @@ class TacheAuto(_TacheBase):
                 geo = (x0 + (gauche - 1) * step, y0 - (haut - 1) * step, step, step)
                 proba = float(prob[rr, cc].mean())
                 for geom in mask_to_geometries(sub, geo):
+                    if batiment:
+                        # les formes se construisent à la fin, dans le SCR de l'image
+                        f = QgsFeature(champs_emprises())
+                        f.setGeometry(geom)
+                        f.setAttributes([None, 0, "auto", None, proba, "libre", None, None, None])
+                        feats.append(f)
+                        continue
                     geom, forme = regularize(geom, p["regularisation"], tolerance=step)
-                    geom.transform(self.tr)
-                    f = QgsFeature(champs_emprises())
-                    f.setGeometry(geom)
-                    f.setAttributes([None, 0, "auto", "haute" if proba >= 0.6 else "moyenne",
-                                     round(proba, 3), forme, round(da.measureArea(geom), 1),
-                                     self.source.name, aujourdhui])
-                    feats.append(f)
-        self.resultats = _sans_enceintes(feats)
+                    feats.append(self._emprise(geom, forme, proba, da, aujourdhui))
+        feats = _sans_enceintes(feats)
+        if batiment:
+            items = [(f.geometry(), f["score"]) for f in feats]
+            objets = formes.construire(items, self.upm)
+            ecarts = formes.contrastes(self.source, [o[0] for o in objets], self.upm)
+            feats = [self._emprise(g, forme, s, da, aujourdhui, e is not None and e < formes.SEUIL_CONTRASTE)
+                     for (g, forme, s), e in zip(objets, ecarts)]
+        self.resultats = feats
         return True
+
+    def _emprise(self, geom, forme, proba, da, aujourdhui, a_verifier=False):
+        geom = QgsGeometry(geom)
+        geom.transform(self.tr)
+        f = QgsFeature(champs_emprises())
+        f.setGeometry(geom)
+        fiabilite = "a_verifier" if a_verifier else "haute" if proba >= 0.6 else "moyenne"
+        f.setAttributes([None, 0, "auto", fiabilite,
+                         round(proba, 3), forme, round(da.measureArea(geom), 1),
+                         self.source.name, aujourdhui])
+        return f
 
 
 def _sans_enceintes(feats, min_inclus=2):

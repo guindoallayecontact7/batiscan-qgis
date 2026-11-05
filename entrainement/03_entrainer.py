@@ -84,8 +84,13 @@ class Vignettes(Dataset):
         return np.clip(img, 0, 255).astype(np.uint8), np.ascontiguousarray(msk)
 
 
-def perte(logits, cible, poids):
-    ce = F.cross_entropy(logits, cible, weight=poids, ignore_index=IGNORE)
+def perte(logits, cible, poids, poids_dur=1.0):
+    # valeur 3 du masque : fond que le modèle prend pour du bâti (voir 12_negatifs.py)
+    dur = cible == 3
+    cible = torch.where(dur, torch.zeros_like(cible), cible)
+    ce = F.cross_entropy(logits, cible, ignore_index=IGNORE, reduction="none")
+    w = poids[cible.clamp(max=2)] * (cible != IGNORE) * (1 + (poids_dur - 1) * dur)
+    ce = (ce * w).sum() / w.sum().clamp(min=1)
     # Dice sur « bâtiment » (intérieur + contour)
     p = logits.softmax(1)[:, 1:].sum(1)
     valide = cible != IGNORE
@@ -127,10 +132,18 @@ def main():
     ap.add_argument("--lot", type=int, default=12)
     ap.add_argument("--encodeur", default="resnet34")
     ap.add_argument("--taille", type=int, default=384)
+    ap.add_argument("--init", help="point de contrôle .pt dont on reprend les poids")
+    ap.add_argument("--lr", type=float, default=1e-3, help="taux maximal du OneCycle")
+    ap.add_argument("--jeux-sup", nargs="*", default=[], help="dossiers de vignettes en plus pour l'entraînement")
+    ap.add_argument("--poids-dur", type=float, default=1.0, help="poids des négatifs difficiles (valeur 3 du masque)")
+    ap.add_argument("--sup-seul", action="store_true", help="n'entraîner que sur --jeux-sup (pré-entraînement)")
     a = ap.parse_args()
 
     tous = {os.path.basename(d).rsplit("_", 1)[0] for d in glob.glob(os.path.join(a.jeu, "*"))}
-    entr = lister(a.jeu, tous - set(a.validation))
+    entr = [] if a.sup_seul else lister(a.jeu, tous - set(a.validation))
+    for js in a.jeux_sup:
+        noms = {os.path.basename(d).rsplit("_", 1)[0] for d in glob.glob(os.path.join(js, "*"))}
+        entr += lister(js, noms - set(a.validation))
     val = lister(a.jeu, set(a.validation))
     print(f"entraînement : {len(entr)} vignettes ({sorted(tous - set(a.validation))}) ; "
           f"validation : {len(val)} ({a.validation})", flush=True)
@@ -140,9 +153,11 @@ def main():
                       drop_last=True, persistent_workers=True)
     ch_v = DataLoader(Vignettes(val, augmenter=False), batch_size=4, num_workers=2)
     modele = smp.Unet(a.encodeur, encoder_weights="imagenet", classes=3).to(dev)
+    if a.init:
+        modele.load_state_dict(torch.load(a.init, map_location=dev)["etat"])
     poids = torch.tensor([1.0, 1.0, 3.0], device=dev)
     opt = torch.optim.AdamW(modele.parameters(), lr=3e-4, weight_decay=1e-4)
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=1e-3, total_steps=a.epoques * len(ch_e))
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr, total_steps=a.epoques * len(ch_e))
     scaler = torch.amp.GradScaler()
     os.makedirs(a.sortie, exist_ok=True)
     meilleur, journal = -1, []
@@ -151,7 +166,7 @@ def main():
         for x, y in ch_e:
             x, y = x.to(dev, non_blocking=True), y.to(dev, non_blocking=True)
             with torch.autocast("cuda", dtype=torch.float16):
-                l = perte(modele(x).float(), y, poids)
+                l = perte(modele(x).float(), y, poids, a.poids_dur)
             opt.zero_grad(set_to_none=True)
             scaler.scale(l).backward()
             scaler.step(opt)
@@ -166,6 +181,9 @@ def main():
             meilleur = m["f1"]
             torch.save({"etat": modele.state_dict(), "encodeur": a.encodeur, "metriques": m},
                        os.path.join(a.sortie, "meilleur.pt"))
+    # le meilleur F1 est mesuré sur une référence incomplète : garder aussi la fin de l'entraînement
+    torch.save({"etat": modele.state_dict(), "encodeur": a.encodeur, "metriques": m},
+               os.path.join(a.sortie, "dernier.pt"))
     with open(os.path.join(a.sortie, "journal.json"), "w") as f:
         json.dump(journal, f, indent=1)
 

@@ -19,7 +19,7 @@ Elle part de ce que l'on a souvent sous la main après une enquête de terrain :
 
 L'image peut être un GeoTIFF (orthophoto, drone, Pléiades...) ou un fond XYZ/WMS déjà chargé dans QGIS.
 
-Chaque emprise porte les champs `id_point`, `nb_points`, `methode`, `fiabilite`, `score`, `forme` (rectangle, cercle ou libre), `surface_m2`, `source` et `date`. Le champ `fiabilite` vaut « haute » quand le point tombait sur le toit, « moyenne » quand il a fallu exclure le sol de la vignette, et « faible » quand le toit a été trouvé en cherchant autour du point. Une couche « Points sans emprise » liste les points que l'outil n'a pas su traiter.
+Chaque emprise porte les champs `id_point`, `nb_points`, `methode`, `fiabilite`, `score`, `forme` (rectangle, cercle ou libre), `surface_m2`, `source` et `date`. Le champ `fiabilite` vaut « haute » quand le point tombait sur le toit, « moyenne » quand il a fallu exclure le sol de la vignette, et « faible » quand le toit a été trouvé en cherchant autour du point. Une couche « Points sans emprise » liste les points que l'outil n'a pas su traiter. En détection automatique, `fiabilite` vaut « a_verifier » pour les objets de même couleur que le sol et `forme` indique rectangle, cercle ou angles_droits.
 
 ## Premiers résultats
 
@@ -34,24 +34,33 @@ Les emprises de fiabilité faible sont à relire : il arrive qu'elles prennent u
 
 ## Détection automatique, sans points
 
-L'extension propose le modèle « BatiScan Sahel v2 », qui détecte les bâtiments sur l'image seule. C'est un U-Net (encodeur ResNet-34) à trois classes : fond, intérieur et contour de bâtiment. La classe contour sert à séparer les bâtiments accolés.
+L'extension propose le modèle « BatiScan Sahel v6 », qui détecte les bâtiments sur l'image seule. C'est un U-Net (encodeur ResNet-34) à trois classes : fond, intérieur et contour de bâtiment. La classe contour sert à séparer les bâtiments accolés.
 
-Il a été entraîné sur 9 villages du Mali, à 30 cm/pixel :
+Il a été entraîné à 30 cm/pixel, en deux temps :
 
-- 11 277 points relevés sur le terrain à Baba, Dandougou, Dialakoro, Niagassoba et N'jikouna, transformés en emprises par SAM, sur les images Google et Bing ;
-- 4 949 polygones produits avec le plugin « AI Segmentation » de TerraLab à Aite, Tiemena, Bourdala et Koffing (confiance de 0,5 ou plus), sur l'image Google. Ces polygones ne contiennent presque pas de cases rondes : les zones où le modèle précédent voyait un bâtiment absent des polygones sont exclues de l'entraînement, pour ne pas apprendre les cases comme du fond.
+- un pré-entraînement sur 2 116 vignettes tirées d'emprises ouvertes d'Afrique de l'Ouest, dont Google Open Buildings ;
+- un affinage sur 8 villages du Mali (points relevés sur le terrain transformés en emprises par SAM, et polygones produits avec le plugin « AI Segmentation » de TerraLab), puis sur 9 autres villages où des toits ont été confirmés à la main.
 
-Le test porte sur Doumanani, un village tenu à l'écart de l'entraînement. La détection n'utilise aucun point ; les 778 points relevés servent seulement à mesurer le résultat.
+La forme « Bâtiment », proposée par défaut, retire les murs et appendices fins, fusionne les morceaux d'un même bâtiment, redresse les contours et coupe les chevauchements : deux objets ne se superposent jamais. Les objets de même couleur que le sol autour reçoivent `fiabilite = a_verifier`. Ce sont souvent de vrais bâtiments : ce marquage dit où relire, il ne faut pas les supprimer en bloc.
 
-| Image | Points retrouvés, v2 | v1 (0.2.0) | Durée (village entier, CPU) |
+### Résultats vérifiés à la main
+
+Le test porte sur 20 zones de 100 m tirées au hasard à Soungola et à Boulal, deux villages tenus à l'écart de l'entraînement. Les objets ont été classés à la main sur l'image Google, soit 636 bâtiments confirmés.
+
+| Village | Bâtiments retrouvés | Objets justes | F1 |
 |---|---|---|---|
-| Google | 95,0 % | 92,2 % | 18 s |
-| Bing | 87,7 % | 75,4 % | 19 s |
-| Esri (zoom 17, environ 1,2 m/px) | 84,8 % | 81,2 % | 30 s |
+| Soungola | 90,5 % | 96,5 % | 0,934 |
+| Boulal | 87,2 % | 88,7 % | 0,879 |
+| Ensemble | 89,3 % | 93,7 % | 0,914 |
 
-Environ la moitié des emprises détectées contiennent un point relevé. À l'image, une bonne partie des autres sont des bâtiments que le relevé n'a pas comptés (annexes, cuisines, greniers), mais une partie sont des erreurs : ce chiffre ne mesure donc pas exactement la précision.
+Ces chiffres sont à lire avec leurs limites :
 
-Sur des zones sans points, v2 détecte mieux que v1 les grands toits (hangars à Koutiala) et le bâti dense en banco (Djenné). Il trace encore parfois le mur d'enceinte d'une concession comme un bâtiment, et les très grands édifices restent incomplets.
+- 143 objets jugés douteux sont retirés du calcul ; selon leur sort, le F1 d'ensemble va de 0,861 à 0,931 ;
+- la liste de référence vient des détections elles-mêmes : un bâtiment manqué par toutes les méthodes n'est pas compté ;
+- un bâtiment compte comme retrouvé dès que 30 % de sa surface est couverte : ce score ne mesure pas la précision des contours ;
+- deux villages et une seule personne pour le contrôle, avec la même image : un autre fond ou une autre région peut donner moins bien.
+
+À cette résolution, une cour fermée de murs et un toit plat en terre se ressemblent, même à l'œil. Le modèle trace aussi parfois un enclos comme un bâtiment, et les très grands édifices restent incomplets.
 
 Le dossier [`entrainement/`](entrainement/LISEZMOI.md) contient la chaîne complète pour entraîner un modèle sur votre propre zone à partir de vos points.
 
@@ -102,7 +111,8 @@ Réglages utiles : la résolution de travail (0,3 m/px convient aux fonds Google
 |---|---|---|---|
 | MobileSAM quantifié | points et clic | 11 Mo | Apache-2.0 |
 | SAM ViT-B quantifié | points et clic, plus précis et plus lent | 75 Mo | Apache-2.0 |
-| BatiScan Sahel v2 | détection automatique, bâti rural et bourgs du Sahel | 98 Mo | recherche et tests, non commercial |
+| BatiScan Sahel v6 | détection automatique, bâti rural et bourgs du Sahel | 98 Mo | recherche et tests, non commercial |
+| BatiScan Sahel v2 | ancienne version | 98 Mo | recherche et tests, non commercial |
 | BatiScan Sahel v1 | ancienne version | 98 Mo | recherche et tests, non commercial |
 | Bâtiments RAMP (Deepness) | détection automatique, générique | 82 Mo | voir le Model ZOO de Deepness |
 
