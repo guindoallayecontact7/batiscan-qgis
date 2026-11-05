@@ -32,7 +32,7 @@ CATALOGUE = [
         "type": "segmenteur",
         "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.5.0/batiscan_sahel_v6.onnx",
         "fichier": "batiscan_sahel_v6.onnx",
-        "sha256": "38f1daf1bfce5d55c6e5d4aebc8b0f4e60f5345677ab3c8625816d8854dd8257",
+        "sha256": "38f1daf1bfce5d55c6e5d4aebc8b0f4e60f5345677ab3c8625816d8854dd8257",  # pragma: allowlist secret (empreinte publique du modèle)
         "taille_mo": 98,
         "licence": "recherche et tests, non commercial",
     },
