@@ -131,6 +131,14 @@ Les modèles SAM viennent de [vietanhdev/segment-anything-onnx-models](https://h
 
 Les conditions d'utilisation de Google et d'Esri limitent l'extraction de données à partir de leurs fonds de carte, surtout pour un usage commercial. Pour un travail payant, utiliser une imagerie dont la licence le permet : drone, achat d'images (Pléiades, Maxar...), ou sources ouvertes adaptées.
 
+## Données d'entraînement
+
+Le modèle BatiScan Sahel v6 a été entraîné en partie sur des étiquettes issues de ces jeux de données ouverts :
+
+- [Google Open Buildings](https://sites.research.google/open-buildings/), utilisé sous licence [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) ;
+- [Microsoft Global ML Building Footprints](https://github.com/microsoft/GlobalMLBuildingFootprints), sous licence [ODbL](https://opendatacommons.org/licenses/odbl/) ;
+- [OpenStreetMap](https://www.openstreetmap.org/copyright), © contributeurs d'OpenStreetMap, sous licence ODbL.
+
 ## Licence
 
 GNU GPL version 2 ou ultérieure (voir `LICENSE`), comme l'exige le dépôt officiel des extensions QGIS.
