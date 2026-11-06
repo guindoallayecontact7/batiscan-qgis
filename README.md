@@ -66,6 +66,15 @@ Le dossier [`entrainement/`](entrainement/LISEZMOI.md) contient la chaîne compl
 
 ## Installation
 
+### Depuis le dépôt officiel de QGIS
+
+1. Dans QGIS, ouvrir Extensions > Installer/Gérer les extensions.
+2. Chercher « BatiScan IA », puis cliquer sur Installer.
+
+La [page de l'extension](https://plugins.qgis.org/plugins/batiscan/) se trouve sur plugins.qgis.org.
+
+Au 6 novembre 2026, la version 0.5.1 attend l'approbation du dépôt, qui propose encore la 0.3.0, expérimentale. Pour la voir dans la liste, cocher « Afficher aussi les extensions expérimentales » dans l'onglet Paramètres du gestionnaire. Pour avoir la 0.5.1 dès maintenant, télécharger `batiscan-0.5.1.zip` depuis la [dernière version GitHub](https://github.com/guindoallayecontact7/batiscan-qgis/releases/latest), puis utiliser Extensions > Installer depuis un ZIP.
+
 ### Depuis le code (pour tester)
 
 1. Cloner le dépôt.
