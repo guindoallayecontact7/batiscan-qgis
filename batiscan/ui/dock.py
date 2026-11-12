@@ -432,8 +432,9 @@ class DockBatiScan(QDockWidget):
         aide = QLabel(
             "Compte les bâtiments de toutes les localités d'une couche en un seul lancement. "
             "Polygones : comptage dans chaque limite. Points : soit un rayon recentré sur le "
-            "village (le point est déplacé vers le sud, le nord, l'est ou l'ouest jusqu'à "
-            "tomber sur le bâti, puis placé au centre du village), soit la recherche des "
+            "village (un point déjà au centre n'est pas déplacé ; sinon il est décalé vers le sud, "
+            "le nord, l'est ou l'ouest jusqu'à tomber sur le bâti, puis placé au centre du village, "
+            "avec un rayon calculé pour chaque point), soit la recherche des "
             "limites de villages dans un rayon (chaque village trouvé est compté à part). "
             "Une zone déjà analysée n'est jamais redétectée.")
         aide.setWordWrap(True)
@@ -458,9 +459,13 @@ class DockBatiScan(QDockWidget):
         self.multi_mode.addItem("Rayon recentré sur le village (S, N, E, O)", MODE_RECENTRER)
         self.multi_mode.addItem("Limites des villages dans le rayon de recherche", MODE_LIMITES)
         self.multi_rayon = _spin(500, 50, 10000, 50, 0, "m")
-        self.multi_rayon.setToolTip("Rayon de comptage autour du centre du village.")
-        self.multi_couvrir = QCheckBox("Agrandir le rayon pour couvrir tout le village")
+        self.multi_rayon.setToolTip("Rayon fixe, utilisé seulement si le rayon automatique est décoché "
+                                    "ou si aucun village n'est trouvé autour du point.")
+        self.multi_couvrir = QCheckBox("Rayon automatique (couvre tout le village, propre à chaque point)")
+        self.multi_couvrir.setToolTip("Le rayon va du centre retenu jusqu'au bâtiment le plus éloigné du "
+                                      "village, plus 10 m. Un point déjà au centre du village n'est pas déplacé.")
         self.multi_couvrir.setChecked(True)
+        self.multi_couvrir.toggled.connect(self._etat_multi)
         self.multi_dmax = _spin(1000, 0, 10000, 50, 0, "m")
         self.multi_dmax.setToolTip("Distance maximale de déplacement du point vers le sud, le nord, l'est ou l'ouest.")
         self.multi_pas = _spin(50, 10, 500, 10, 0, "m")
@@ -496,8 +501,8 @@ class DockBatiScan(QDockWidget):
         f.addRow("Limites des villages", self.multi_lim)
         f.addRow("Champ du nom (limites)", self.multi_lim_nom)
         f.addRow("Méthode pour les points", self.multi_mode)
-        f.addRow("Rayon de comptage", self.multi_rayon)
         f.addRow("", self.multi_couvrir)
+        f.addRow("Rayon fixe", self.multi_rayon)
         f.addRow("Décalage maximal", self.multi_dmax)
         f.addRow("Pas du décalage", self.multi_pas)
         f.addRow("Rayon de recherche", self.multi_recherche)
@@ -513,8 +518,9 @@ class DockBatiScan(QDockWidget):
 
     def _etat_multi(self):
         recentrer = self.multi_mode.currentData() == MODE_RECENTRER
-        for wdg in (self.multi_rayon, self.multi_couvrir, self.multi_dmax, self.multi_pas):
+        for wdg in (self.multi_couvrir, self.multi_dmax, self.multi_pas):
             wdg.setEnabled(recentrer)
+        self.multi_rayon.setEnabled(recentrer and not self.multi_couvrir.isChecked())
         self.multi_recherche.setEnabled(not recentrer)
 
     def _importer_localites(self):

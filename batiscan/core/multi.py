@@ -39,6 +39,14 @@ from .tasks import (ImageIncomplete, _mesureur, _sans_enceintes, _TacheBase, cha
 from .vectorize import regularize
 
 CELLULE_PX = 2048
+# Un point dans le village, à moins de max(25 m, 10 % de l'étendue du village) du centre
+# du bâti, est considéré comme déjà centré et n'est pas déplacé.
+CENTRE_TOLERANCE_MIN_M = 25
+CENTRE_TOLERANCE_PART = 0.10
+# Un village de moins de HAMEAU_MAX bâtiments sous le point est remplacé par un village au
+# moins HAMEAU_FACTEUR fois plus grand trouvé dans la distance de décalage.
+HAMEAU_MAX = 100
+HAMEAU_FACTEUR = 3
 STATUT_IMAGE = "imagerie en ligne indisponible, à relancer"
 DIRECTIONS = (("le sud", 0, -1), ("le nord", 0, 1), ("l'est", 1, 0), ("l'ouest", -1, 0))
 MARGE_LIMITE_M = 10.0  # autour du bâti, pour tracer la limite d'un village détecté
@@ -313,13 +321,34 @@ class TacheMulti(_TacheBase):
                 ids.append(i)
         return ids
 
-    def _village_en(self, q, upm):
+    def _village_en(self, q, upm, mini=None, exclure=None):
         p = self.p
+        mini = p["min_batiments"] if mini is None else mini
         for k in self.det.proches(q, p["ecart_m"] * upm):
             v = self.det.village(k, p["ecart_m"] * upm, ETENDUE_VILLAGE_M * upm)
-            if len(v) >= p["min_batiments"]:
+            if len(v) >= mini and (exclure is None or v.isdisjoint(exclure)):
                 return v
         return None
+
+    def _chercher_village(self, pt, upm, mini=None, exclure=None):
+        """Premier village rencontré en s'écartant du point vers le sud, le nord, l'est puis l'ouest."""
+        p = self.p
+        d = p["pas_m"]
+        while d <= p["decalage_max_m"] + 1e-6:
+            for nom_dir, dx, dy in DIRECTIONS:
+                q = QgsPointXY(pt.x() + dx * d * upm, pt.y() + dy * d * upm)
+                v = self._village_en(q, upm, mini, exclure)
+                if v:
+                    return v, nom_dir, d
+                if self.isCanceled():
+                    return None, "", 0
+            d += p["pas_m"]
+        return None, "", 0
+
+    def _etendue(self, ids, c):
+        """Distance du point c au bord du bâtiment le plus éloigné du groupe (unités du SCR)."""
+        cg = QgsGeometry.fromPointXY(c)
+        return max(self.det.objets[k][0].hausdorffDistance(cg) for k in ids)
 
     def _recentrer(self, loc):
         p = self.p
@@ -334,17 +363,19 @@ class TacheMulti(_TacheBase):
         v = self._village_en(pt, upm)
         trouve = "point dans le village" if v else None
         if v is None:
-            d = p["pas_m"]
-            while v is None and d <= p["decalage_max_m"] + 1e-6:
-                for nom_dir, dx, dy in DIRECTIONS:
-                    q = QgsPointXY(pt.x() + dx * d * upm, pt.y() + dy * d * upm)
-                    v = self._village_en(q, upm)
-                    if v:
-                        trouve = f"village trouvé vers {nom_dir} à {d:.0f} m"
-                        break
-                    if self.isCanceled():
-                        return []
-                d += p["pas_m"]
+            v, nom_dir, d = self._chercher_village(pt, upm)
+            if v:
+                trouve = f"village trouvé vers {nom_dir} à {d:.0f} m"
+        elif len(v) < HAMEAU_MAX:
+            # le point tombe sur un hameau : un village nettement plus grand tout près est
+            # plus probablement la localité visée
+            grand, nom_dir, d = self._chercher_village(pt, upm, max(HAMEAU_MAX, HAMEAU_FACTEUR * len(v)), v)
+            if grand:
+                trouve = (f"point sur un hameau de {len(v)} bâtiments ; village principal trouvé vers "
+                          f"{nom_dir} à {d:.0f} m (à vérifier)")
+                v = grand
+        if self.isCanceled():
+            return []
         self._centre(loc, pt, "point fourni", "")
         if v is None:
             zone = QgsGeometry.fromPointXY(pt).buffer(p["rayon_m"] * upm, 32)
@@ -353,12 +384,15 @@ class TacheMulti(_TacheBase):
                                    p["rayon_m"], "aucun", 0.0)
             return [z]
         c = self.det.centre(v)
+        etendue = self._etendue(v, c) / upm
+        if trouve == "point dans le village" and math.hypot(c.x() - pt.x(), c.y() - pt.y()) / upm <= max(
+                CENTRE_TOLERANCE_MIN_M, CENTRE_TOLERANCE_PART * etendue):
+            # le point est déjà au centre du village : on ne le déplace pas
+            c = pt
+            trouve = "point au centre du village, non déplacé"
         de, dn = (c.x() - pt.x()) / upm, (c.y() - pt.y()) / upm
-        rayon = p["rayon_m"]
-        if p["couvrir"]:
-            cg = QgsGeometry.fromPointXY(c)
-            loin = max(self.det.objets[k][0].hausdorffDistance(cg) for k in v) / upm
-            rayon = max(rayon, math.ceil(loin + MARGE_LIMITE_M))
+        # rayon automatique : du centre retenu jusqu'au bâtiment le plus éloigné du village
+        rayon = math.ceil(self._etendue(v, c) / upm + MARGE_LIMITE_M) if p["couvrir"] else p["rayon_m"]
         texte = _texte_decalage(de, dn)
         self._centre(loc, c, "centre du village", texte)
         zone = QgsGeometry.fromPointXY(c).buffer(rayon * upm, 64)
