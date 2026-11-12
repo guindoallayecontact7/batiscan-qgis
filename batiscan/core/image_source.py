@@ -39,6 +39,8 @@ class SourceImage:
         self.crs = layer.crs()
         self.extent = QgsRectangle(layer.extent())
         self.provider = layer.dataProvider().clone()
+        # fond en ligne (XYZ, WMS...) : une tuile qui n'arrive pas revient noire
+        self.distant = layer.providerType() in ("wms", "wcs", "arcgismapserver")
         self.is_argb = self.provider.dataType(1) in _ARGB
         nb = self.provider.bandCount()
         if self.is_argb:

@@ -7,6 +7,7 @@ projet pendant run(). Les couches résultats sont créées dans finished().
 
 import math
 import os
+import time
 import traceback
 from collections import defaultdict
 from datetime import date
@@ -262,35 +263,20 @@ class TacheAuto(_TacheBase):
             w, h = bw + 2 * marge, bh + 2 * marge
             x0 = self.emprise.xMinimum() + (bx - marge) * step
             y0 = self.emprise.yMaximum() - (by - marge) * step
-            ext = QgsRectangle(x0, y0 - h * step, x0 + w * step, y0)
-            img = self.source.read(ext, w, h)
-
             def prog(v, nb=nb):
                 self.setProgress((nb + v / 100.0) * 100.0 / len(blocs))
 
-            prob, interieur = seg.probabilites_image(img, prog, self.isCanceled)
-            lab = etiqueter(prob, interieur, seuil)
-            for k, rr, cc in instances(lab):
-                if len(rr) < amin:
+            def garde(c, r, bw=bw, bh=bh):
+                return marge <= c < marge + bw and marge <= r < marge + bh  # sinon : bloc voisin
+
+            for geom, proba in detecter_bloc(seg, self.source, x0, y0, w, h, step, seuil, amin,
+                                             garde, prog, self.isCanceled):
+                if batiment:
+                    # les formes se construisent à la fin, dans le SCR de l'image
+                    feats.append(objet_brut(geom, proba))
                     continue
-                if not (marge <= cc.mean() < marge + bw and marge <= rr.mean() < marge + bh):
-                    continue  # traité par le bloc voisin
-                haut, gauche = int(rr.min()), int(cc.min())
-                hh, ww = int(rr.max()) - haut + 1, int(cc.max()) - gauche + 1
-                sub = np.zeros((hh + 2, ww + 2), bool)
-                sub[rr - haut + 1, cc - gauche + 1] = True
-                geo = (x0 + (gauche - 1) * step, y0 - (haut - 1) * step, step, step)
-                proba = float(prob[rr, cc].mean())
-                for geom in mask_to_geometries(sub, geo):
-                    if batiment:
-                        # les formes se construisent à la fin, dans le SCR de l'image
-                        f = QgsFeature(champs_emprises())
-                        f.setGeometry(geom)
-                        f.setAttributes([None, 0, "auto", None, proba, "libre", None, None, None])
-                        feats.append(f)
-                        continue
-                    geom, forme = regularize(geom, p["regularisation"], tolerance=step)
-                    feats.append(self._emprise(geom, forme, proba, da, aujourdhui))
+                geom, forme = regularize(geom, p["regularisation"], tolerance=step)
+                feats.append(self._emprise(geom, forme, proba, da, aujourdhui))
         feats = _sans_enceintes(feats)
         if batiment:
             items = [(f.geometry(), f["score"]) for f in feats]
@@ -311,6 +297,74 @@ class TacheAuto(_TacheBase):
                          round(proba, 3), forme, round(da.measureArea(geom), 1),
                          self.source.name, aujourdhui])
         return f
+
+
+def objet_brut(geom, proba):
+    """Détection brute (SCR de l'image) en attente de la construction des formes."""
+    f = QgsFeature(champs_emprises())
+    f.setGeometry(geom)
+    f.setAttributes([None, 0, "auto", None, proba, "libre", None, None, None])
+    return f
+
+
+class ImageIncomplete(Exception):
+    """Fond en ligne qui renvoie encore des tuiles noires après plusieurs essais."""
+
+
+PAUSES_RELECTURE_S = (5, 20, 60)
+NOIR_TOLERE = 0.005
+
+
+def lire_complet(source, rect, w, h, annule=None):
+    """Lit la fenêtre ; sur un fond en ligne, relit tant qu'une partie revient noire.
+
+    Une tuile Google ou Esri qui n'arrive pas (délai dépassé, limitation du serveur)
+    est rendue en noir : sans relecture, la zone passerait pour vide de bâtiments.
+    Lève ImageIncomplete si l'image reste trouée après les relectures.
+    """
+    img = source.read(rect, w, h)
+    if not getattr(source, "distant", False):
+        return img
+    for pause in PAUSES_RELECTURE_S:
+        if float((img.max(axis=2) == 0).mean()) <= NOIR_TOLERE:
+            return img
+        for _ in range(pause):
+            if annule and annule():
+                return img
+            time.sleep(1)
+        img = source.read(rect, w, h)
+    if float((img.max(axis=2) == 0).mean()) > NOIR_TOLERE:
+        raise ImageIncomplete("imagerie en ligne indisponible (tuiles noires)")
+    return img
+
+
+def detecter_bloc(seg, source, x0, y0, w, h, step, seuil, amin_px, garde=None, progress=None, annule=None):
+    """Détections brutes d'une fenêtre de w × h pixels de coin haut-gauche (x0, y0).
+
+    Renvoie [(géométrie dans le SCR de l'image, probabilité moyenne)]. `garde(colonne,
+    ligne)` reçoit le centre de chaque objet en pixels et dit s'il faut le garder.
+    Une fenêtre vide (hors de l'image) ne passe pas par le modèle.
+    """
+    img = lire_complet(source, QgsRectangle(x0, y0 - h * step, x0 + w * step, y0), w, h, annule)
+    if img.max() == 0:
+        return []
+    prob, interieur = seg.probabilites_image(img, progress, annule)
+    lab = etiqueter(prob, interieur, seuil)
+    sortie = []
+    for _k, rr, cc in instances(lab):
+        if len(rr) < amin_px:
+            continue
+        if garde is not None and not garde(cc.mean(), rr.mean()):
+            continue
+        haut, gauche = int(rr.min()), int(cc.min())
+        hh, ww = int(rr.max()) - haut + 1, int(cc.max()) - gauche + 1
+        sub = np.zeros((hh + 2, ww + 2), bool)
+        sub[rr - haut + 1, cc - gauche + 1] = True
+        geo = (x0 + (gauche - 1) * step, y0 - (haut - 1) * step, step, step)
+        proba = float(prob[rr, cc].mean())
+        for geom in mask_to_geometries(sub, geo):
+            sortie.append((geom, proba))
+    return sortie
 
 
 def _sans_enceintes(feats, min_inclus=2):

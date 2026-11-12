@@ -15,9 +15,10 @@ from qgis.core import (
     QgsProject,
     QgsRendererCategory,
     QgsSettings,
+    QgsSingleSymbolRenderer,
     QgsWkbTypes,
 )
-from qgis.gui import QgsExtentWidget, QgsFileWidget, QgsMapLayerComboBox
+from qgis.gui import QgsExtentWidget, QgsFieldComboBox, QgsFileWidget, QgsMapLayerComboBox
 from qgis.PyQt import sip
 from qgis.PyQt.QtCore import Qt, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
@@ -44,6 +45,9 @@ from qgis.PyQt.QtWidgets import (
 
 from ..core import models, qc
 from ..core.image_source import SourceImage
+from ..core.localites import champ_nom, exporter_tableau, points_depuis_tableau
+from ..core.localites import ouvrir as ouvrir_localites
+from ..core.multi import MODE_LIMITES, MODE_RECENTRER, TacheMulti, champs_batiments, champs_centres, champs_zones
 from ..core.runtime import available_providers
 from ..core.sam_onnx import SamOnnx
 from ..core.tasks import TacheAuto, TacheJeuEntrainement, TachePoints, champs_emprises, couche_memoire
@@ -87,6 +91,11 @@ def _style_emprises(couche):
     couche.setRenderer(QgsCategorizedSymbolRenderer("fiabilite", cats))
 
 
+def _choisir_champ_nom(combo, couche):
+    combo.setLayer(couche)
+    combo.setField(champ_nom(couche))
+
+
 class DockBatiScan(QDockWidget):
     def __init__(self, iface, parent=None):
         super().__init__("BatiScan IA – bâtiments", parent)
@@ -97,11 +106,13 @@ class DockBatiScan(QDockWidget):
         self._outil = None
         self._couche_saisie = None
         self._sam_interactif = None
+        self._derniere_multi = None
 
         tabs = QTabWidget()
         tabs.addTab(self._onglet_points(), "Points → emprises")
         tabs.addTab(self._onglet_clic(), "Clic")
         tabs.addTab(self._onglet_auto(), "Automatique")
+        tabs.addTab(self._onglet_multi(), "Multi-localités")
         tabs.addTab(self._onglet_qc(), "Contrôle")
         tabs.addTab(self._onglet_jeu(), "Entraînement")
         tabs.addTab(self._onglet_modeles(), "Modèles")
@@ -125,7 +136,8 @@ class DockBatiScan(QDockWidget):
         return c
 
     def _rafraichir_combos(self):
-        for c, t in ((self.pt_modele, "sam"), (self.clic_modele, "sam"), (self.auto_modele, "segmenteur")):
+        for c, t in ((self.pt_modele, "sam"), (self.clic_modele, "sam"), (self.auto_modele, "segmenteur"),
+                     (self.multi_modele, "segmenteur")):
             actuel = c.currentText()
             c.clear()
             for m in models.tous(t):
@@ -412,6 +424,246 @@ class DockBatiScan(QDockWidget):
         QgsProject.instance().addMapLayer(couche)
         self._msg(f"{len(tache.resultats)} bâtiments détectés (résolution {tache.resolution} m/px).",
                   Qgis.MessageLevel.Success, 10)
+
+    # -------------------------------------------------------- multi-localités
+    def _onglet_multi(self):
+        w = QWidget()
+        f = QFormLayout(w)
+        aide = QLabel(
+            "Compte les bâtiments de toutes les localités d'une couche en un seul lancement. "
+            "Polygones : comptage dans chaque limite. Points : soit un rayon recentré sur le "
+            "village (le point est déplacé vers le sud, le nord, l'est ou l'ouest jusqu'à "
+            "tomber sur le bâti, puis placé au centre du village), soit la recherche des "
+            "limites de villages dans un rayon (chaque village trouvé est compté à part). "
+            "Une zone déjà analysée n'est jamais redétectée.")
+        aide.setWordWrap(True)
+        f.addRow(aide)
+        self.multi_raster = _combo_couche(Qgis.LayerFilter.RasterLayer)
+        self.multi_modele = self._combo_modeles("segmenteur")
+        self.multi_loc = _combo_couche(Qgis.LayerFilter.PointLayer | Qgis.LayerFilter.PolygonLayer)
+        self.multi_nom = QgsFieldComboBox()
+        self.multi_nom.setAllowEmptyFieldName(True)
+        self.multi_loc.layerChanged.connect(lambda c: _choisir_champ_nom(self.multi_nom, c))
+        _choisir_champ_nom(self.multi_nom, self.multi_loc.currentLayer())
+        b_imp = QPushButton("Importer un fichier (Excel, CSV, Shapefile…)")
+        b_imp.clicked.connect(self._importer_localites)
+        self.multi_selection = QCheckBox("Sélection uniquement")
+        self.multi_lim = _combo_couche(Qgis.LayerFilter.PolygonLayer)
+        self.multi_lim.setAllowEmptyLayer(True, "aucune (limites tracées d'après le bâti)")
+        self.multi_lim.setLayer(None)
+        self.multi_lim_nom = QgsFieldComboBox()
+        self.multi_lim_nom.setAllowEmptyFieldName(True)
+        self.multi_lim.layerChanged.connect(lambda c: _choisir_champ_nom(self.multi_lim_nom, c))
+        self.multi_mode = QComboBox()
+        self.multi_mode.addItem("Rayon recentré sur le village (S, N, E, O)", MODE_RECENTRER)
+        self.multi_mode.addItem("Limites des villages dans le rayon de recherche", MODE_LIMITES)
+        self.multi_rayon = _spin(500, 50, 10000, 50, 0, "m")
+        self.multi_rayon.setToolTip("Rayon de comptage autour du centre du village.")
+        self.multi_couvrir = QCheckBox("Agrandir le rayon pour couvrir tout le village")
+        self.multi_couvrir.setChecked(True)
+        self.multi_dmax = _spin(1000, 0, 10000, 50, 0, "m")
+        self.multi_dmax.setToolTip("Distance maximale de déplacement du point vers le sud, le nord, l'est ou l'ouest.")
+        self.multi_pas = _spin(50, 10, 500, 10, 0, "m")
+        self.multi_recherche = _spin(1000, 100, 10000, 100, 0, "m")
+        self.multi_ecart = _spin(50, 10, 500, 5, 0, "m")
+        self.multi_ecart.setToolTip("Deux bâtiments plus proches que cet écart appartiennent au même village.")
+        self.multi_min = QSpinBox()
+        self.multi_min.setRange(1, 1000)
+        self.multi_min.setValue(20)
+        self.multi_min.setSuffix(" bâtiments")
+        self.multi_min.setToolTip("En dessous, le groupe n'est pas considéré comme un village (case isolée, hameau) "
+                                 "et la recherche continue plus loin.")
+        self.multi_amin = _spin(6, 0, 200, 1, 0, "m²")
+        self.multi_reg = QComboBox()
+        self.multi_reg.addItem("Bâtiment (formes droites, sans superposition)", "batiment")
+        for k, t in REGULARISATIONS:
+            self.multi_reg.addItem(t, k)
+        self.multi_btn = QPushButton("Lancer le comptage")
+        self.multi_btn.clicked.connect(self._lancer_multi)
+        self.multi_txt = QPlainTextEdit()
+        self.multi_txt.setReadOnly(True)
+        self.multi_txt.setMinimumHeight(140)
+        self.multi_export = QPushButton("Exporter le tableau (Excel ou CSV)…")
+        self.multi_export.setEnabled(False)
+        self.multi_export.clicked.connect(self._exporter_multi)
+        self.multi_mode.currentIndexChanged.connect(self._etat_multi)
+        f.addRow("Image", self.multi_raster)
+        f.addRow("Modèle", self.multi_modele)
+        f.addRow("Localités", self.multi_loc)
+        f.addRow(b_imp)
+        f.addRow("Champ du nom", self.multi_nom)
+        f.addRow("", self.multi_selection)
+        f.addRow("Limites des villages", self.multi_lim)
+        f.addRow("Champ du nom (limites)", self.multi_lim_nom)
+        f.addRow("Méthode pour les points", self.multi_mode)
+        f.addRow("Rayon de comptage", self.multi_rayon)
+        f.addRow("", self.multi_couvrir)
+        f.addRow("Décalage maximal", self.multi_dmax)
+        f.addRow("Pas du décalage", self.multi_pas)
+        f.addRow("Rayon de recherche", self.multi_recherche)
+        f.addRow("Écart entre bâtiments", self.multi_ecart)
+        f.addRow("Taille minimale d'un village", self.multi_min)
+        f.addRow("Surface minimale", self.multi_amin)
+        f.addRow("Forme", self.multi_reg)
+        f.addRow(self.multi_btn)
+        f.addRow(self.multi_txt)
+        f.addRow(self.multi_export)
+        self._etat_multi()
+        return self._scroll(w)
+
+    def _etat_multi(self):
+        recentrer = self.multi_mode.currentData() == MODE_RECENTRER
+        for wdg in (self.multi_rayon, self.multi_couvrir, self.multi_dmax, self.multi_pas):
+            wdg.setEnabled(recentrer)
+        self.multi_recherche.setEnabled(not recentrer)
+
+    def _importer_localites(self):
+        chemin, _ = QFileDialog.getOpenFileName(
+            self, "Importer des localités", "",
+            "Localités (*.xlsx *.xls *.ods *.csv *.txt *.shp *.gpkg *.geojson *.json *.kml);;Tous les fichiers (*)")
+        if not chemin:
+            return
+        nom = os.path.splitext(os.path.basename(chemin))[0]
+        lyr = ouvrir_localites(chemin, nom)
+        if not lyr.isValid():
+            QMessageBox.warning(self, "BatiScan", "Fichier illisible : " + chemin)
+            return
+        if lyr.isSpatial():
+            QgsProject.instance().addMapLayer(lyr)
+            self.multi_loc.setLayer(lyr)
+            self._msg(f"{lyr.featureCount()} localités importées depuis {os.path.basename(chemin)}.",
+                      Qgis.MessageLevel.Success)
+            return
+        couche, erreur = points_depuis_tableau(lyr, nom, QgsProject.instance().crs())
+        if couche is None:
+            QMessageBox.warning(self, "BatiScan", erreur)
+            return
+        QgsProject.instance().addMapLayer(couche)
+        self.multi_loc.setLayer(couche)
+        ignores = lyr.featureCount() - couche.featureCount()
+        self._msg(f"{couche.featureCount()} localités importées"
+                  + (f", {ignores} lignes sans coordonnées ignorées" if ignores else "") + ".",
+                  Qgis.MessageLevel.Warning if ignores else Qgis.MessageLevel.Success, 10)
+
+    def _lancer_multi(self):
+        raster, loc_lyr = self.multi_raster.currentLayer(), self.multi_loc.currentLayer()
+        if not raster or not loc_lyr:
+            self._msg("Choisissez une image et une couche de localités.", Qgis.MessageLevel.Warning)
+            return
+        ch = self._modele_pret(self.multi_modele.currentData())
+        if not ch:
+            return
+        source = SourceImage(raster)
+        ctx = QgsProject.instance()
+        champ = self.multi_nom.currentField()
+        tr = QgsCoordinateTransform(loc_lyr.crs(), source.crs, ctx)
+        it = loc_lyr.getSelectedFeatures() if self.multi_selection.isChecked() else loc_lyr.getFeatures()
+        est_point = loc_lyr.geometryType() == Qgis.GeometryType.Point
+        localites = []
+        for ft in it:
+            if not ft.hasGeometry():
+                continue
+            g = QgsGeometry(ft.geometry())
+            g.transform(tr)
+            if est_point:
+                g = QgsGeometry.fromPointXY(g.centroid().asPoint())
+            nom = ft[champ] if champ else None
+            localites.append({"nom": str(nom) if nom not in (None, "") else f"localité {ft.id()}",
+                              "id": ft.id(), "geom": g, "point": est_point})
+        if not localites:
+            self._msg("Aucune localité à traiter.", Qgis.MessageLevel.Warning)
+            return
+        limites = []
+        lim_lyr = self.multi_lim.currentLayer()
+        if lim_lyr is not None:
+            ch_lim = self.multi_lim_nom.currentField()
+            tr_l = QgsCoordinateTransform(lim_lyr.crs(), source.crs, ctx)
+            for ft in lim_lyr.getFeatures():
+                if ft.hasGeometry():
+                    g = QgsGeometry(ft.geometry())
+                    g.transform(tr_l)
+                    nom = ft[ch_lim] if ch_lim else None
+                    limites.append((str(nom) if nom not in (None, "") else f"limite {ft.id()}", g))
+        crs_sortie = ctx.crs()
+        if crs_sortie.isGeographic() or not crs_sortie.isValid():
+            crs_sortie = source.crs
+        params = {"resolution": None, "seuil": None, "aire_min": self.multi_amin.value(),
+                  "regularisation": self.multi_reg.currentData(), "gpu": self._gpu(),
+                  "mode": self.multi_mode.currentData(), "rayon_m": self.multi_rayon.value(),
+                  "couvrir": self.multi_couvrir.isChecked(), "decalage_max_m": self.multi_dmax.value(),
+                  "pas_m": self.multi_pas.value(), "rayon_recherche_m": self.multi_recherche.value(),
+                  "ecart_m": self.multi_ecart.value(), "min_batiments": self.multi_min.value()}
+        if len(localites) > 50:
+            rep = QMessageBox.question(
+                self, "BatiScan",
+                f"{len(localites)} localités à traiter. Chaque localité demande la détection de "
+                "plusieurs km² d'image : le traitement peut durer plusieurs heures. Continuer ?")
+            if rep != QMessageBox.StandardButton.Yes:
+                return
+        tache = TacheMulti(source, localites, limites, crs_sortie, ch["onnx"], params)
+        tache._nom_localites = loc_lyr.name()
+        self.multi_btn.setEnabled(False)
+        self.multi_txt.setPlainText(f"Comptage de {len(localites)} localités en cours…")
+        self._lancer(tache, self._fin_multi)
+
+    def _fin_multi(self, tache):
+        self.multi_btn.setEnabled(True)
+        if not self._fin_tache(tache):
+            self.multi_txt.setPlainText("Comptage interrompu.")
+            return
+        nom = tache._nom_localites
+        projet = QgsProject.instance()
+        zones = couche_memoire(f"Comptage par localité – {nom}", tache.crs_sortie, "Polygon",
+                               champs_zones(), tache.zones)
+        zones.setRenderer(QgsSingleSymbolRenderer(QgsFillSymbol.createSimple(
+            {"color": "0,0,0,0", "outline_color": "#2b83ba", "outline_width": "0.8", "outline_style": "dash"})))
+        bat = couche_memoire(f"Bâtiments comptés – {nom}", tache.crs_sortie, "Polygon",
+                             champs_batiments(), tache.batiments)
+        _style_emprises(bat)
+        projet.addMapLayer(zones)
+        projet.addMapLayer(bat)
+        if tache.p["mode"] == MODE_RECENTRER and tache.centres:
+            projet.addMapLayer(couche_memoire(f"Centres des villages – {nom}", tache.crs_sortie, "Point",
+                                              champs_centres(), tache.centres))
+        self._derniere_multi = zones
+        self.multi_export.setEnabled(True)
+        s = tache.synthese
+        lignes = [f"Localités traitées : {s['localites']}",
+                  f"Zones comptées : {s['zones']}",
+                  f"Bâtiments (somme des zones) : {s['batiments']}",
+                  f"Bâtiments distincts (sans double compte) : {s['uniques']}",
+                  f"dont à vérifier : {s['a_verifier']}",
+                  f"Zones sans bâtiment : {s['zones_vides']}",
+                  *([f"Localités non traitées (imagerie en ligne indisponible, à relancer) : {s['non_traitees']}"]
+                    if s.get("non_traitees") else []),
+                  f"Cellules d'image analysées : {s['cellules']} (résolution {tache.resolution} m/px)",
+                  "", "Détail par zone :"]
+        for z in tache.zones:
+            lim = f" / {z['limite']}" if z["limite"] else ""
+            dec = f", décalage {z['decalage']}" if z["decalage"] not in (None, "", "aucun") else ""
+            lignes.append(f"- {z['localite']}{lim} : {z['nb_batiments']} bâtiments ({z['type_zone']}{dec})")
+        self.multi_txt.setPlainText("\n".join(lignes))
+        self._msg(f"{s['zones']} zones, {s['batiments']} bâtiments au total.", Qgis.MessageLevel.Success, 10)
+
+    def _exporter_multi(self):
+        zones = self._derniere_multi
+        if zones is None or sip.isdeleted(zones) or QgsProject.instance().mapLayer(zones.id()) is None:
+            self._msg("Relancez le comptage : la couche de résultats n'existe plus.", Qgis.MessageLevel.Warning)
+            return
+        chemin, filtre = QFileDialog.getSaveFileName(self, "Exporter le tableau", zones.name() + ".xlsx",
+                                                     "Excel (*.xlsx);;CSV (*.csv)")
+        if not chemin:
+            return
+        csv = chemin.lower().endswith(".csv") or (filtre.startswith("CSV") and not chemin.lower().endswith(".xlsx"))
+        if csv and not chemin.lower().endswith(".csv"):
+            chemin += ".csv"
+        if not csv and not chemin.lower().endswith(".xlsx"):
+            chemin += ".xlsx"
+        err = exporter_tableau(zones, chemin, csv)
+        if err:
+            QMessageBox.warning(self, "BatiScan", "Export impossible : " + err)
+            return
+        self._msg("Tableau exporté : " + chemin, Qgis.MessageLevel.Success, 10)
 
     # --------------------------------------------------------------- contrôle
     def _onglet_qc(self):
