@@ -45,24 +45,6 @@ CATALOGUE = [
         "taille_mo": 82,
         "licence": "voir Deepness Model ZOO",
     },
-    {
-        "id": "batiscan_sahel_v2",
-        "nom": "Archive · BatiScan v2 : remplacé par v6, pour comparaison (30 cm/px, 98 Mo)",
-        "type": "segmenteur",
-        "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.3.0/batiscan_sahel_v2.onnx",
-        "fichier": "batiscan_sahel_v2.onnx",
-        "taille_mo": 98,
-        "licence": "recherche et tests, non commercial",
-    },
-    {
-        "id": "batiscan_sahel_v1",
-        "nom": "Archive · BatiScan v1 : première version, pour comparaison (30 cm/px, 98 Mo)",
-        "type": "segmenteur",
-        "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.2.0/batiscan_sahel_v1.onnx",
-        "fichier": "batiscan_sahel_v1.onnx",
-        "taille_mo": 98,
-        "licence": "recherche et tests, non commercial",
-    },
 ]
 
 _CLE_PERSO = "batiscan/modeles_perso"
