@@ -101,7 +101,7 @@ def _choisir_champ_nom(combo, couche):
 
 class DockBatiScan(QDockWidget):
     def __init__(self, iface, parent=None):
-        super().__init__("BatiScan IA – bâtiments", parent)
+        super().__init__("BatiScan – bâtiments", parent)
         self.setObjectName("BatiScanDock")
         self.iface = iface
         self._taches = []

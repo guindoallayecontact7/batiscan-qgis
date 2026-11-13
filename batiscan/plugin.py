@@ -17,11 +17,11 @@ class BatiScanPlugin:
 
     def initGui(self):
         icone = QIcon(os.path.join(os.path.dirname(__file__), "icon.png"))
-        self.action = QAction(icone, "BatiScan IA – cartographie des bâtiments", self.iface.mainWindow())
+        self.action = QAction(icone, "BatiScan – cartographie des bâtiments", self.iface.mainWindow())
         self.action.setCheckable(True)
         self.action.triggered.connect(self.basculer)
         self.iface.addToolBarIcon(self.action)
-        self.iface.addPluginToRasterMenu("BatiScan IA", self.action)
+        self.iface.addPluginToRasterMenu("BatiScan", self.action)
 
     def unload(self):
         if self.dock:
@@ -29,7 +29,7 @@ class BatiScanPlugin:
             self.iface.removeDockWidget(self.dock)
             self.dock.deleteLater()
             self.dock = None
-        self.iface.removePluginRasterMenu("BatiScan IA", self.action)
+        self.iface.removePluginRasterMenu("BatiScan", self.action)
         self.iface.removeToolBarIcon(self.action)
 
     def _verifier_dependances(self):
@@ -37,17 +37,17 @@ class BatiScanPlugin:
         if not manque:
             return True
         rep = QMessageBox.question(
-            self.iface.mainWindow(), "BatiScan IA",
+            self.iface.mainWindow(), "BatiScan",
             "Bibliothèques manquantes : " + ", ".join(manque) + ".\n\n"
             "Les installer maintenant avec pip (dans votre profil utilisateur) ?")
         if rep != QMessageBox.StandardButton.Yes:
             return False
         ok, journal = dependances.installer(manque)
         if ok:
-            QMessageBox.information(self.iface.mainWindow(), "BatiScan IA",
+            QMessageBox.information(self.iface.mainWindow(), "BatiScan",
                                     "Installation terminée. Redémarrez QGIS puis rouvrez BatiScan.")
         else:
-            QMessageBox.critical(self.iface.mainWindow(), "BatiScan IA",
+            QMessageBox.critical(self.iface.mainWindow(), "BatiScan",
                                  "Échec de l'installation :\n\n" + journal[-3000:])
         return False
 

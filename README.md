@@ -1,6 +1,6 @@
-<p align="center"><img src="docs/icon_256.png" width="96" alt="BatiScan IA"></p>
+<p align="center"><img src="docs/icon_256.png" width="96" alt="BatiScan"></p>
 
-# BatiScan IA
+# BatiScan
 
 Extension QGIS de cartographie des bâtiments par intelligence artificielle, pensée pour les villages et quartiers du Sahel (cases rondes, toits en tôle, concessions en banco).
 
@@ -19,7 +19,7 @@ Elle part de ce que l'on a souvent sous la main après une enquête de terrain :
 
 L'image peut être un GeoTIFF (orthophoto, drone, Pléiades...) ou un fond XYZ/WMS déjà chargé dans QGIS.
 
-Chaque emprise porte les champs `id_point`, `nb_points`, `methode`, `fiabilite`, `score`, `forme` (rectangle, cercle ou libre), `surface_m2`, `source` et `date`. Le champ `fiabilite` vaut « haute » quand le point tombait sur le toit, « moyenne » quand il a fallu exclure le sol de la vignette, et « faible » quand le toit a été trouvé en cherchant autour du point. Une couche « Points sans emprise » liste les points que l'outil n'a pas su traiter. En détection automatique, `fiabilite` vaut « a_verifier » pour les objets de même couleur que le sol et `forme` indique rectangle, cercle ou angles_droits.
+Chaque emprise porte les champs `id_point`, `nb_points`, `methode`, `fiabilite`, `score`, `forme` (rectangle, cercle ou libre), `surface_m2`, `source` et `date`. Le champ `fiabilite` vaut « haute » quand le point tombait sur le toit, « moyenne » quand il a fallu exclure le sol de la vignette, et « faible » quand le toit a été trouvé en cherchant autour du point. Une couche « Points sans emprise » liste les points que l'outil n'a pas su traiter. Elle porte aussi `perimetre_m`, `x_centre`, `y_centre`, `orientation_deg` (grand côté, de 0 à 180° depuis le nord) et `controle`, qui vaut « ok » ou donne les raisons de relire l'objet. En détection automatique, `fiabilite` vaut « a_verifier » pour les objets au score inférieur à 0,85 ou de moins de 20 m², et `forme` indique rectangle, cercle, angles_droits ou polygone.
 
 ## Premiers résultats
 
@@ -41,7 +41,7 @@ Il a été entraîné à 30 cm/pixel, en deux temps :
 - un pré-entraînement sur 2 116 vignettes tirées d'emprises ouvertes d'Afrique de l'Ouest, dont Google Open Buildings ;
 - un affinage sur 8 villages du Mali (points relevés sur le terrain transformés en emprises par SAM, et polygones produits avec le plugin « AI Segmentation » de TerraLab), puis sur 9 autres villages où des toits ont été confirmés à la main.
 
-La forme « Bâtiment », proposée par défaut, retire les murs et appendices fins, fusionne les morceaux d'un même bâtiment, redresse les contours et coupe les chevauchements : deux objets ne se superposent jamais. Les objets de même couleur que le sol autour reçoivent `fiabilite = a_verifier`. Ce sont souvent de vrais bâtiments : ce marquage dit où relire, il ne faut pas les supprimer en bloc.
+La forme « Bâtiment », proposée par défaut, retire les murs et appendices fins, fusionne les morceaux d'un même bâtiment, redresse les contours et coupe les chevauchements : deux objets ne se superposent jamais. Les objets au score faible ou de moins de 20 m² reçoivent `fiabilite = a_verifier`. Sur 44 zones vérifiées, environ un sur trois est une fausse détection : ce marquage dit où relire, il ne faut pas les supprimer en bloc.
 
 ### Résultats vérifiés à la main
 
@@ -69,7 +69,7 @@ Le dossier [`entrainement/`](entrainement/LISEZMOI.md) contient la chaîne compl
 ### Depuis le dépôt officiel de QGIS
 
 1. Dans QGIS, ouvrir Extensions > Installer/Gérer les extensions.
-2. Chercher « BatiScan IA », puis cliquer sur Installer.
+2. Chercher « BatiScan », puis cliquer sur Installer.
 
 La [page de l'extension](https://plugins.qgis.org/plugins/batiscan/) se trouve sur plugins.qgis.org.
 
@@ -82,7 +82,7 @@ Au 6 novembre 2026, la version 0.5.1 attend l'approbation du dépôt, qui propos
    - Windows : `%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\`
    - Linux : `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
    - macOS : `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
-3. Redémarrer QGIS, puis activer « BatiScan IA » dans Extensions > Installer/Gérer les extensions.
+3. Redémarrer QGIS, puis activer « BatiScan » dans Extensions > Installer/Gérer les extensions.
 
 Sous Windows, un lien évite de recopier à chaque modification :
 
