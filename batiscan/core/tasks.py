@@ -58,29 +58,40 @@ def champs_emprises():
     return f
 
 
-SURFACE_PETITE = 12.0  # m² : sous ce seuil, souvent un appentis, une ombre ou un morceau de toit
+# Marquage « a_verifier » des détections automatiques. Seuils mesurés le 13/11/2026 sur 2 013 objets
+# jugés (44 zones de Bamako, Kita et villages) avec le modèle v6 : la règle marque 27 % des objets,
+# dont 32 % sont faux, contre 6,5 % de faux parmi les autres, et attrape 65 % des fausses détections.
+# Le contraste avec le sol (ancienne règle) séparait mal : AUC 0,60 contre 0,74 pour la surface.
+# Les seuils de score valent pour v6 ; un autre modèle peut demander d'autres valeurs.
+SCORE_A_VERIFIER = 0.85
+SURFACE_A_VERIFIER = 20.0  # m²
 SURFACE_GRANDE = 400.0  # m² : au-delà, plusieurs toits ou une concession ont pu être fusionnés
-SCORE_FAIBLE = 0.6
 
 
-def motifs_controle(f):
+def a_verifier(score, surface_m2):
+    """Vrai si une détection automatique doit être relue (score faible ou petit objet)."""
+    return (score is not None and score < SCORE_A_VERIFIER) or (
+        surface_m2 is not None and surface_m2 < SURFACE_A_VERIFIER)
+
+
+def motifs_controle(f, faible_contraste=False):
     """Raisons de vérifier un bâtiment, séparées par des virgules, ou « ok »."""
     m = []
-    if f["fiabilite"] == "a_verifier":
-        m.append("faible_contraste")
-    if f["forme"] == "polygone":
-        m.append("forme_irreguliere")
-    if f["score"] is not None and f["score"] < SCORE_FAIBLE:
+    if f["score"] is not None and f["score"] < SCORE_A_VERIFIER and f["methode"] == "auto":
         m.append("score_faible")
     s = f["surface_m2"]
-    if s is not None and s < SURFACE_PETITE:
+    if s is not None and s < SURFACE_A_VERIFIER:
         m.append("petit")
+    if f["forme"] == "polygone":
+        m.append("forme_irreguliere")
+    if faible_contraste:
+        m.append("faible_contraste")
     if s is not None and s > SURFACE_GRANDE:
         m.append("grand_fusion_possible")
     return ",".join(m) or "ok"
 
 
-def completer(f, da):
+def completer(f, da, faible_contraste=False):
     """Remplit périmètre, centre, orientation et motifs de contrôle (champs de champs_emprises)."""
     n = f.fields().count()
     a = list(f.attributes())
@@ -97,7 +108,7 @@ def completer(f, da):
     # (la « hauteur » de QGIS est le côté dans la direction de l'angle)
     _, _, angle, larg, haut = g.orientedMinimumBoundingBox()
     f["orientation_deg"] = round((angle if haut >= larg else angle + 90) % 180, 1) % 180
-    f["controle"] = motifs_controle(f)
+    f["controle"] = motifs_controle(f, faible_contraste)
     return f
 
 
@@ -336,16 +347,17 @@ class TacheAuto(_TacheBase):
         self.resultats = feats
         return True
 
-    def _emprise(self, geom, forme, proba, da, aujourdhui, a_verifier=False):
+    def _emprise(self, geom, forme, proba, da, aujourdhui, faible_contraste=False):
         geom = QgsGeometry(geom)
         geom.transform(self.tr)
         f = QgsFeature(champs_emprises())
         f.setGeometry(geom)
-        fiabilite = "a_verifier" if a_verifier else "haute" if proba >= 0.6 else "moyenne"
+        surface = da.measureArea(geom)
+        fiabilite = "a_verifier" if a_verifier(proba, surface) else "haute"
         f.setAttributes([None, 0, "auto", fiabilite,
-                         round(proba, 3), forme, round(da.measureArea(geom), 1),
+                         round(proba, 3), forme, round(surface, 1),
                          self.source.name, aujourdhui])
-        return completer(f, da)
+        return completer(f, da, faible_contraste)
 
 
 def objet_brut(geom, proba):

@@ -34,8 +34,8 @@ from qgis.PyQt.QtCore import QMetaType
 
 from . import formes
 from .segmenter import OnnxSegmenter
-from .tasks import (ImageIncomplete, _mesureur, _sans_enceintes, _TacheBase, champs_emprises, completer,
-                    detecter_bloc, objet_brut)
+from .tasks import (ImageIncomplete, _mesureur, _sans_enceintes, _TacheBase, a_verifier,
+                    champs_emprises, completer, detecter_bloc, objet_brut)
 from .vectorize import regularize
 
 CELLULE_PX = 2048
@@ -94,7 +94,7 @@ class Detections:
         self.reg = params["regularisation"]
         self.cote = CELLULE_PX * self.res * upm_ref
         self.faites = set()
-        self.objets = []  # (géométrie, forme, score, a_verifier)
+        self.objets = []  # (géométrie, forme, score, a_verifier, faible_contraste)
         self.centres = []
         self.index = QgsSpatialIndex()
         self.index_formes = QgsSpatialIndex()  # emprises, pour couper ce qui déborde d'une cellule voisine
@@ -143,7 +143,7 @@ class Detections:
             for f in feats:
                 g, forme = regularize(f.geometry(), self.reg, tolerance=step)
                 objets.append((g, forme, f["score"], False))
-        for g, forme, s, av in objets:
+        for g, forme, s, fc in objets:
             p = g.pointOnSurface().asPoint()
             if not (coeur.xMinimum() <= p.x() < coeur.xMaximum() and coeur.yMinimum() <= p.y() < coeur.yMaximum()):
                 continue
@@ -158,7 +158,7 @@ class Detections:
                 p = g.pointOnSurface().asPoint()
             k = len(self.objets)
             self.index_formes.addFeature(k, g.boundingBox())
-            self.objets.append((g, forme, s, av))
+            self.objets.append((g, forme, s, a_verifier(s, g.area() / upm ** 2), fc))
             self.centres.append(p)
             ft = QgsFeature(k)
             ft.setGeometry(QgsGeometry.fromPointXY(p))
@@ -297,15 +297,15 @@ class TacheMulti(_TacheBase):
             self.setProgress(100.0 * (i + 1) / n)
         aujourdhui = date.today().isoformat()
         for k, nom in compte.items():
-            g, forme, s, av = det.objets[k]
+            g, forme, s, av, fc = det.objets[k]
             geom = QgsGeometry(g)
             geom.transform(self.tr)
             f = QgsFeature(champs_batiments())
             f.setGeometry(geom)
-            fiab = "a_verifier" if av else "haute" if s >= 0.6 else "moyenne"
+            fiab = "a_verifier" if av else "haute"
             f.setAttributes([None, 0, "auto", fiab, round(s, 3), forme, round(self.da.measureArea(geom), 1),
                              self.source.name, aujourdhui])
-            completer(f, self.da)
+            completer(f, self.da, fc)
             f["localite"] = nom
             self.batiments.append(f)
         non_traitees = sum(1 for z in self.zones if z["statut"] == STATUT_IMAGE)

@@ -86,7 +86,7 @@ def _combo_couche(filtre):
 
 def _style_emprises(couche):
     couleurs = {"haute": "#1a9850", "moyenne": "#fd8d3c", "faible": "#d73027", "a_verifier": "#7b3294"}
-    noms = {"a_verifier": "à vérifier (même couleur que le sol)"}
+    noms = {"a_verifier": "à vérifier (score faible ou petit objet)"}
     cats = []
     for val, coul in couleurs.items():
         sym = QgsFillSymbol.createSimple({"color": "0,0,0,0", "outline_color": coul, "outline_width": "0.5"})
@@ -355,9 +355,10 @@ class DockBatiScan(QDockWidget):
         f = QFormLayout(w)
         aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan Sahel v6 » a été "
                       "entraîné sur des villages du Mali et des emprises ouvertes d'Afrique de l'Ouest "
-                      "(30 cm/px), des cases rondes aux toits en tôle. Les objets de même couleur que le "
-                      "sol sont marqués « à vérifier » : ce sont souvent de vrais bâtiments, à relire sans "
-                      "les supprimer en bloc. Tout modèle ONNX au format Deepness peut aussi être ajouté "
+                      "(30 cm/px), des cases rondes aux toits en tôle. Les objets au score faible ou de moins "
+                      "de 20 m² sont marqués « à vérifier » : environ un sur trois est une fausse détection, "
+                      "à relire sans les supprimer en bloc. Le champ « controle » donne la raison. "
+                      "Tout modèle ONNX au format Deepness peut aussi être ajouté "
                       "(onglet Modèles).")
         aide.setWordWrap(True)
         f.addRow(aide)
