@@ -1,7 +1,10 @@
-"""Contrôle qualité : points de terrain contre emprises (détectées ou dessinées)."""
+"""Contrôle qualité : points de terrain contre emprises, et contrôle géométrique des emprises."""
+
+import statistics
 
 from qgis.core import (
     QgsCoordinateTransform,
+    QgsDistanceArea,
     QgsFeatureRequest,
     QgsGeometry,
     QgsProject,
@@ -65,3 +68,106 @@ def rapport_texte(r, nom_points, nom_poly):
         f"Emprises sans point (bâtiment non relevé ou fausse détection) : {r['emprises_sans_point']}\n"
         f"Emprises avec plusieurs points (bâtiments fusionnés ?) : {r['emprises_multi_points']}"
     )
+
+
+SURFACE_MIN_M2 = 4.0  # plus petit, c'est un débris de vectorisation
+CHEVAUCHEMENT_MIN_M2 = 0.01
+IOU_DOUBLON = 0.9
+
+
+def controle_geometrique(couche, selection=False):
+    """Contrôle d'une couche d'emprises : validité, chevauchements, doublons, débris, motifs.
+
+    Renvoie un dict de chiffres et un dict {fid: [anomalies]}. Les objets ne sont jamais modifiés.
+    """
+    da = QgsDistanceArea()
+    da.setSourceCrs(couche.crs(), QgsProject.instance().transformContext())
+    da.setEllipsoid("EPSG:7030")
+    feats = list(couche.getSelectedFeatures() if selection else couche.getFeatures())
+    geoms = {f.id(): f.geometry() for f in feats if f.hasGeometry() and not f.geometry().isEmpty()}
+    anomalies = {}
+
+    def noter(fid, motif):
+        anomalies.setdefault(fid, []).append(motif)
+
+    surfaces = {}
+    for fid, g in geoms.items():
+        if not g.isGeosValid():
+            noter(fid, "geometrie_invalide")
+        if g.isMultipart() and len(g.asGeometryCollection()) > 1:
+            noter(fid, "multi_parties")
+        surfaces[fid] = da.measureArea(g)
+        if surfaces[fid] < SURFACE_MIN_M2:
+            noter(fid, "debris")
+    index = QgsSpatialIndex()
+    for fid, g in geoms.items():
+        index.addFeature(fid, g.boundingBox())
+    paires = doublons = 0
+    surf_chev = 0.0
+    for fid, g in geoms.items():
+        if not g.isGeosValid():
+            continue
+        for autre in index.intersects(g.boundingBox()):
+            if autre <= fid or not geoms[autre].isGeosValid() or not g.intersects(geoms[autre]):
+                continue
+            inter = g.intersection(geoms[autre])
+            a = da.measureArea(inter) if inter and not inter.isEmpty() else 0.0
+            if a < CHEVAUCHEMENT_MIN_M2:
+                continue
+            union = surfaces[fid] + surfaces[autre] - a
+            if union > 0 and a / union >= IOU_DOUBLON:
+                doublons += 1
+                noter(autre, "doublon")
+            else:
+                paires += 1
+                surf_chev += a
+                noter(fid, "chevauchement")
+                noter(autre, "chevauchement")
+    motifs = {}
+    idx_ctrl = couche.fields().indexOf("controle")
+    idx_fiab = couche.fields().indexOf("fiabilite")
+    fiab = {}
+    for f in feats:
+        if idx_ctrl >= 0 and f[idx_ctrl]:
+            for m in str(f[idx_ctrl]).split(","):
+                motifs[m] = motifs.get(m, 0) + 1
+        if idx_fiab >= 0:
+            fiab[f[idx_fiab]] = fiab.get(f[idx_fiab], 0) + 1
+    s = list(surfaces.values())
+    return {
+        "objets": len(feats),
+        "sans_geometrie": len(feats) - len(geoms),
+        "invalides": sum(1 for v in anomalies.values() if "geometrie_invalide" in v),
+        "multi_parties": sum(1 for v in anomalies.values() if "multi_parties" in v),
+        "debris": sum(1 for v in anomalies.values() if "debris" in v),
+        "paires_chevauchantes": paires,
+        "surface_chevauchee_m2": surf_chev,
+        "doublons": doublons,
+        "surface_totale_m2": sum(s),
+        "surface_mediane_m2": statistics.median(s) if s else 0.0,
+        "motifs": motifs,
+        "fiabilite": fiab,
+    }, anomalies
+
+
+def rapport_geometrique(r, nom):
+    n = max(r["objets"], 1)
+    lignes = [
+        f"Couche : {nom} — {r['objets']} objets",
+        f"Surface bâtie : {r['surface_totale_m2']:.0f} m² (médiane {r['surface_mediane_m2']:.1f} m² par objet)",
+        "",
+        "Topologie",
+        f"  Géométries invalides : {r['invalides']} ({100 * r['invalides'] / n:.2f} %)",
+        f"  Sans géométrie : {r['sans_geometrie']}",
+        f"  Objets en plusieurs parties : {r['multi_parties']}",
+        f"  Paires qui se chevauchent : {r['paires_chevauchantes']} ({r['surface_chevauchee_m2']:.1f} m²)",
+        f"  Doublons (IoU ≥ {IOU_DOUBLON}) : {r['doublons']}",
+        f"  Débris (< {SURFACE_MIN_M2:.0f} m²) : {r['debris']}",
+    ]
+    if r["fiabilite"]:
+        lignes += ["", "Fiabilité"] + [f"  {k or '(vide)'} : {v} ({100 * v / n:.1f} %)"
+                                      for k, v in sorted(r["fiabilite"].items(), key=lambda x: -x[1])]
+    if r["motifs"]:
+        lignes += ["", "Motifs de contrôle (un objet peut en avoir plusieurs)"] + [
+            f"  {k} : {v} ({100 * v / n:.1f} %)" for k, v in sorted(r["motifs"].items(), key=lambda x: -x[1])]
+    return "\n".join(lignes)

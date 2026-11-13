@@ -34,8 +34,8 @@ from qgis.PyQt.QtCore import QMetaType
 
 from . import formes
 from .segmenter import OnnxSegmenter
-from .tasks import (ImageIncomplete, _mesureur, _sans_enceintes, _TacheBase, champs_emprises, detecter_bloc,
-                    objet_brut)
+from .tasks import (ImageIncomplete, _mesureur, _sans_enceintes, _TacheBase, champs_emprises, completer,
+                    detecter_bloc, objet_brut)
 from .vectorize import regularize
 
 CELLULE_PX = 2048
@@ -97,6 +97,7 @@ class Detections:
         self.objets = []  # (géométrie, forme, score, a_verifier)
         self.centres = []
         self.index = QgsSpatialIndex()
+        self.index_formes = QgsSpatialIndex()  # emprises, pour couper ce qui déborde d'une cellule voisine
         self.villages = {}  # id d'objet -> frozenset du village
         self.annule = None
         self.cellules_traitees = 0
@@ -146,7 +147,17 @@ class Detections:
             p = g.pointOnSurface().asPoint()
             if not (coeur.xMinimum() <= p.x() < coeur.xMaximum() and coeur.yMinimum() <= p.y() < coeur.yMaximum()):
                 continue
+            # chaque cellule construit ses formes seule : un objet peut mordre sur celui d'une voisine
+            voisins = [self.objets[k][0] for k in self.index_formes.intersects(g.boundingBox())
+                       if self.objets[k][0].intersects(g)]
+            if voisins:
+                r = formes._plus_grand(g.difference(formes._tampon(QgsGeometry.unaryUnion(voisins), 0.05 * upm)))
+                if r is None or r.area() < 0.6 * g.area():
+                    continue
+                g = r
+                p = g.pointOnSurface().asPoint()
             k = len(self.objets)
+            self.index_formes.addFeature(k, g.boundingBox())
             self.objets.append((g, forme, s, av))
             self.centres.append(p)
             ft = QgsFeature(k)
@@ -293,7 +304,9 @@ class TacheMulti(_TacheBase):
             f.setGeometry(geom)
             fiab = "a_verifier" if av else "haute" if s >= 0.6 else "moyenne"
             f.setAttributes([None, 0, "auto", fiab, round(s, 3), forme, round(self.da.measureArea(geom), 1),
-                             self.source.name, aujourdhui, nom])
+                             self.source.name, aujourdhui])
+            completer(f, self.da)
+            f["localite"] = nom
             self.batiments.append(f)
         non_traitees = sum(1 for z in self.zones if z["statut"] == STATUT_IMAGE)
         sans = sum(1 for z in self.zones if z["nb_batiments"] == 0) - non_traitees

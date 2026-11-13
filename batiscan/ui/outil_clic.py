@@ -16,7 +16,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QApplication
 
 from ..core.point_prompt import Criteres, segmenter_point
-from ..core.tasks import FIABILITE, _mesureur, champs_emprises
+from ..core.tasks import FIABILITE, _mesureur, champs_emprises, completer
 from ..core.vectorize import mask_to_geometries, regularize
 
 
@@ -78,6 +78,7 @@ class OutilClic(QgsMapToolEmitPoint):
             surface = _mesureur(couche.crs()).measureArea(geom)
             f.setAttributes([None, 1, "interactif", FIABILITE["interactif"], round(res["score"], 3),
                              forme, round(surface, 1), src.name, date.today().isoformat()])
+            completer(f, _mesureur(couche.crs()))
             ok, ajout = couche.dataProvider().addFeatures([f])
             if ok and ajout:
                 self._ajouts.append(ajout[0].id())

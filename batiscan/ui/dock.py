@@ -8,7 +8,10 @@ from qgis.core import (
     QgsApplication,
     QgsCategorizedSymbolRenderer,
     QgsCoordinateTransform,
+    QgsFeature,
     QgsFeatureRequest,
+    QgsField,
+    QgsFields,
     QgsFileDownloader,
     QgsFillSymbol,
     QgsGeometry,
@@ -20,7 +23,7 @@ from qgis.core import (
 )
 from qgis.gui import QgsExtentWidget, QgsFieldComboBox, QgsFileWidget, QgsMapLayerComboBox
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import Qt, QUrl
+from qgis.PyQt.QtCore import QMetaType, Qt, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import (
     QCheckBox,
@@ -690,7 +693,38 @@ class DockBatiScan(QDockWidget):
         f.addRow("", self.qc_couche)
         f.addRow(btn)
         f.addRow(self.qc_txt)
+        titre = QLabel("<b>Contrôle géométrique des emprises</b>")
+        f.addRow(titre)
+        aide = QLabel("Validité, chevauchements, doublons, débris et motifs de contrôle de la couche "
+                      "« Emprises » ci-dessus. Les objets ne sont pas modifiés.")
+        aide.setWordWrap(True)
+        f.addRow(aide)
+        self.qc_geo_couche = QCheckBox("Couche des anomalies")
+        self.qc_geo_couche.setChecked(True)
+        btn_geo = QPushButton("Contrôler la géométrie")
+        btn_geo.clicked.connect(self._lancer_qc_geo)
+        f.addRow("", self.qc_geo_couche)
+        f.addRow(btn_geo)
         return self._scroll(w)
+
+    def _lancer_qc_geo(self):
+        poly = self.qc_poly.currentLayer()
+        if not poly:
+            return
+        r, anomalies = qc.controle_geometrique(poly)
+        self.qc_txt.setPlainText(qc.rapport_geometrique(r, poly.name()))
+        if self.qc_geo_couche.isChecked() and anomalies:
+            champs = QgsFields(poly.fields())
+            champs.append(QgsField("anomalies", QMetaType.Type.QString))
+            feats = []
+            for ft in poly.getFeatures(QgsFeatureRequest().setFilterFids(list(anomalies))):
+                nf = QgsFeature(champs)
+                nf.setGeometry(ft.geometry())
+                nf.setAttributes(ft.attributes() + [",".join(anomalies[ft.id()])])
+                feats.append(nf)
+            QgsProject.instance().addMapLayer(couche_memoire(f"Anomalies – {poly.name()}", poly.crs(),
+                                                             QgsWkbTypes.displayString(poly.wkbType()),
+                                                             champs, feats))
 
     def _lancer_qc(self):
         pts, poly = self.qc_points.currentLayer(), self.qc_poly.currentLayer()

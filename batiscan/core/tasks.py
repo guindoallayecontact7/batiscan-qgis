@@ -50,6 +50,54 @@ def champs_emprises():
     f.append(QgsField("surface_m2", QMetaType.Type.Double))
     f.append(QgsField("source", QMetaType.Type.QString))
     f.append(QgsField("date", QMetaType.Type.QString))
+    f.append(QgsField("perimetre_m", QMetaType.Type.Double))
+    f.append(QgsField("x_centre", QMetaType.Type.Double))
+    f.append(QgsField("y_centre", QMetaType.Type.Double))
+    f.append(QgsField("orientation_deg", QMetaType.Type.Double))
+    f.append(QgsField("controle", QMetaType.Type.QString))
+    return f
+
+
+SURFACE_PETITE = 12.0  # m² : sous ce seuil, souvent un appentis, une ombre ou un morceau de toit
+SURFACE_GRANDE = 400.0  # m² : au-delà, plusieurs toits ou une concession ont pu être fusionnés
+SCORE_FAIBLE = 0.6
+
+
+def motifs_controle(f):
+    """Raisons de vérifier un bâtiment, séparées par des virgules, ou « ok »."""
+    m = []
+    if f["fiabilite"] == "a_verifier":
+        m.append("faible_contraste")
+    if f["forme"] == "polygone":
+        m.append("forme_irreguliere")
+    if f["score"] is not None and f["score"] < SCORE_FAIBLE:
+        m.append("score_faible")
+    s = f["surface_m2"]
+    if s is not None and s < SURFACE_PETITE:
+        m.append("petit")
+    if s is not None and s > SURFACE_GRANDE:
+        m.append("grand_fusion_possible")
+    return ",".join(m) or "ok"
+
+
+def completer(f, da):
+    """Remplit périmètre, centre, orientation et motifs de contrôle (champs de champs_emprises)."""
+    n = f.fields().count()
+    a = list(f.attributes())
+    f.setAttributes(a + [None] * (n - len(a)))
+    g = f.geometry()
+    if g is None or g.isEmpty():
+        return f
+    geo = da.sourceCrs().isGeographic()
+    c = g.centroid().asPoint()
+    f["perimetre_m"] = round(da.measurePerimeter(g), 1)
+    f["x_centre"] = round(c.x(), 7 if geo else 2)
+    f["y_centre"] = round(c.y(), 7 if geo else 2)
+    # angle du grand côté du rectangle orienté, en degrés depuis le nord, entre 0 et 180
+    # (la « hauteur » de QGIS est le côté dans la direction de l'angle)
+    _, _, angle, larg, haut = g.orientedMinimumBoundingBox()
+    f["orientation_deg"] = round((angle if haut >= larg else angle + 90) % 180, 1) % 180
+    f["controle"] = motifs_controle(f)
     return f
 
 
@@ -207,6 +255,7 @@ class TachePoints(_TacheBase):
                 f.setGeometry(geom)
                 f.setAttributes([fid, 1, res["methode"], FIABILITE[res["methode"]], round(res["score"], 3),
                                  forme, round(da.measureArea(geom), 1), self.source.name, aujourdhui])
+                completer(f, da)
                 if dedup.ajouter(f):
                     self.stats[res["methode"]] += 1
                 else:
@@ -296,14 +345,14 @@ class TacheAuto(_TacheBase):
         f.setAttributes([None, 0, "auto", fiabilite,
                          round(proba, 3), forme, round(da.measureArea(geom), 1),
                          self.source.name, aujourdhui])
-        return f
+        return completer(f, da)
 
 
 def objet_brut(geom, proba):
     """Détection brute (SCR de l'image) en attente de la construction des formes."""
     f = QgsFeature(champs_emprises())
     f.setGeometry(geom)
-    f.setAttributes([None, 0, "auto", None, proba, "libre", None, None, None])
+    f.setAttributes([None, 0, "auto", None, proba, "libre", None, None, None, None, None, None, None, None])
     return f
 
 
