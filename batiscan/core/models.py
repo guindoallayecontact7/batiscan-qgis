@@ -12,7 +12,7 @@ HF = "https://huggingface.co/vietanhdev/segment-anything-onnx-models/resolve/mai
 CATALOGUE = [
     {
         "id": "mobilesam",
-        "nom": "MobileSAM quantifié (11 Mo, rapide)",
+        "nom": "Pointage rapide · MobileSAM : un clic par toit, tout terrain (11 Mo)",
         "type": "sam",
         "url": HF + "mobile_sam_20230629_quant.zip",
         "taille_mo": 11,
@@ -20,7 +20,7 @@ CATALOGUE = [
     },
     {
         "id": "sam_vit_b",
-        "nom": "SAM ViT-B quantifié (75 Mo, plus précis)",
+        "nom": "Pointage précis · SAM ViT-B : contours plus fidèles, plus lent (75 Mo)",
         "type": "sam",
         "url": HF + "sam_vit_b_01ec64_quant.zip",
         "taille_mo": 75,
@@ -28,7 +28,7 @@ CATALOGUE = [
     },
     {
         "id": "batiscan_sahel_v6",
-        "nom": "BatiScan Sahel v6 – bâti rural et bourgs (98 Mo, 30 cm/px)",
+        "nom": "Bâti sahélien · BatiScan v6 (recommandé) : villages, bourgs et villes, sépare les maisons accolées (30 cm/px, 98 Mo)",
         "type": "segmenteur",
         "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.5.0/batiscan_sahel_v6.onnx",
         "fichier": "batiscan_sahel_v6.onnx",
@@ -37,8 +37,17 @@ CATALOGUE = [
         "licence": "recherche et tests, non commercial",
     },
     {
+        "id": "deepness_ramp",
+        "nom": "Bâti général · RAMP (Deepness) : grands bâtiments isolés, fusionne les maisons accolées (50 cm/px, 82 Mo)",
+        "type": "segmenteur",
+        "url": "https://chmura.put.poznan.pl/s/MwhgQNhyQF3fuBs/download",
+        "fichier": "buildings_ramp.onnx",
+        "taille_mo": 82,
+        "licence": "voir Deepness Model ZOO",
+    },
+    {
         "id": "batiscan_sahel_v2",
-        "nom": "BatiScan Sahel v2 – ancienne version (98 Mo, 30 cm/px)",
+        "nom": "Archive · BatiScan v2 : remplacé par v6, pour comparaison (30 cm/px, 98 Mo)",
         "type": "segmenteur",
         "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.3.0/batiscan_sahel_v2.onnx",
         "fichier": "batiscan_sahel_v2.onnx",
@@ -47,21 +56,12 @@ CATALOGUE = [
     },
     {
         "id": "batiscan_sahel_v1",
-        "nom": "BatiScan Sahel v1 – ancienne version (98 Mo, 30 cm/px)",
+        "nom": "Archive · BatiScan v1 : première version, pour comparaison (30 cm/px, 98 Mo)",
         "type": "segmenteur",
         "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.2.0/batiscan_sahel_v1.onnx",
         "fichier": "batiscan_sahel_v1.onnx",
         "taille_mo": 98,
         "licence": "recherche et tests, non commercial",
-    },
-    {
-        "id": "deepness_ramp",
-        "nom": "Bâtiments RAMP – Deepness (82 Mo, 50 cm/px)",
-        "type": "segmenteur",
-        "url": "https://chmura.put.poznan.pl/s/MwhgQNhyQF3fuBs/download",
-        "fichier": "buildings_ramp.onnx",
-        "taille_mo": 82,
-        "licence": "voir Deepness Model ZOO",
     },
 ]
 
@@ -141,8 +141,33 @@ def modeles_perso():
         chemins_ = json.loads(brut)
     except ValueError:
         chemins_ = []
-    return [{"id": "perso:" + p, "nom": os.path.basename(p) + " (personnel)", "type": "segmenteur",
+    return [{"id": "perso:" + p, "nom": _nom_perso(p), "type": "segmenteur",
              "fichier": p, "perso": True} for p in chemins_]
+
+
+def _nom_perso(p):
+    """Nom d'un modèle ajouté par l'utilisateur ; signale s'il double un modèle du catalogue."""
+    nom = "Personnel · " + os.path.splitext(os.path.basename(p))[0]
+    try:
+        taille = os.path.getsize(p)
+    except OSError:
+        return nom + " (fichier introuvable)"
+    for m in CATALOGUE:
+        if m["type"] == "segmenteur":
+            q = os.path.join(dossier_modeles(), m["id"], m["fichier"])
+            if os.path.isfile(q) and os.path.getsize(q) == taille and _meme_fichier(p, q):
+                return f"{nom} : copie de « {m['nom'].split(' :')[0]} »"
+    return nom + " : ajouté à la main, non mesuré"
+
+
+def _meme_fichier(a, b, n=1 << 20):
+    """Compare le premier et le dernier Mo (les versions d'un même réseau ont la même taille)."""
+    with open(a, "rb") as fa, open(b, "rb") as fb:
+        if fa.read(n) != fb.read(n):
+            return False
+        fa.seek(-n, 2)
+        fb.seek(-n, 2)
+        return fa.read(n) == fb.read(n)
 
 
 def ajouter_modele_perso(path):
@@ -150,6 +175,12 @@ def ajouter_modele_perso(path):
     if path not in actuels:
         actuels.append(path)
         QgsSettings().setValue(_CLE_PERSO, json.dumps(actuels))
+
+
+def retirer_modele_perso(path):
+    """Retire un modèle personnel de la liste ; le fichier reste sur le disque."""
+    restants = [m["fichier"] for m in modeles_perso() if m["fichier"] != path]
+    QgsSettings().setValue(_CLE_PERSO, json.dumps(restants))
 
 
 def tous(type_=None):

@@ -353,7 +353,7 @@ class DockBatiScan(QDockWidget):
     def _onglet_auto(self):
         w = QWidget()
         f = QFormLayout(w)
-        aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan Sahel v6 » a été "
+        aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan v6 » a été "
                       "entraîné sur des villages du Mali et des emprises ouvertes d'Afrique de l'Ouest "
                       "(30 cm/px), des cases rondes aux toits en tôle. Les objets au score faible ou de moins "
                       "de 20 m² sont marqués « à vérifier » : environ un sur trois est une fausse détection, "
@@ -813,7 +813,10 @@ class DockBatiScan(QDockWidget):
         b2.clicked.connect(self._ajouter_perso)
         b3 = QPushButton("Ouvrir le dossier")
         b3.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(models.dossier_modeles())))
-        for b in (b1, b2, b3):
+        b4 = QPushButton("Retirer de la liste (modèle personnel)")
+        b4.setToolTip("Retire le modèle personnel sélectionné de BatiScan. Le fichier .onnx reste sur le disque.")
+        b4.clicked.connect(self._retirer_perso)
+        for b in (b1, b2, b4, b3):
             h.addWidget(b)
         v.addLayout(h)
         self.cb_gpu = QCheckBox("Utiliser le GPU si possible")
@@ -830,9 +833,21 @@ class DockBatiScan(QDockWidget):
         self.liste_modeles.clear()
         for m in models.tous():
             etat = "installé" if models.chemins(m) else "à télécharger"
-            it = QListWidgetItem(f"{m['nom']} — {m['type']} — {etat}")
+            usage = "pointage par clic" if m["type"] == "sam" else "détection automatique"
+            it = QListWidgetItem(f"{m['nom']} | {usage} | {etat}")
             it.setData(256, m)
             self.liste_modeles.addItem(it)
+
+    def _retirer_perso(self):
+        it = self.liste_modeles.currentItem()
+        m = it.data(256) if it else None
+        if not m or not m.get("perso"):
+            self._msg("Sélectionnez un modèle personnel dans la liste.", Qgis.MessageLevel.Info, 5)
+            return
+        models.retirer_modele_perso(m["fichier"])
+        self._rafraichir_combos()
+        self._msg(f"{os.path.basename(m['fichier'])} retiré de la liste (le fichier n'est pas supprimé).",
+                  Qgis.MessageLevel.Success, 5)
 
     def _telecharger_selection(self):
         it = self.liste_modeles.currentItem()
