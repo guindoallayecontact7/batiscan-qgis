@@ -128,7 +128,17 @@ def modeles_perso():
 
 
 def _nom_perso(p):
-    """Nom d'un modèle ajouté par l'utilisateur ; signale s'il double un modèle du catalogue."""
+    """Nom d'un modèle ajouté par l'utilisateur ; signale s'il double un modèle du catalogue.
+
+    Un fichier texte <modèle>.nom placé à côté du .onnx donne le nom affiché tel quel.
+    """
+    try:
+        with open(os.path.splitext(p)[0] + ".nom", encoding="utf-8") as f:
+            choisi = f.readline().strip()
+        if choisi and os.path.isfile(p):
+            return choisi
+    except OSError:
+        pass
     nom = "Personnel · " + os.path.splitext(os.path.basename(p))[0]
     try:
         taille = os.path.getsize(p)
