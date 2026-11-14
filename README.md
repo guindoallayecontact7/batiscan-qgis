@@ -12,10 +12,10 @@ Elle part de ce que l'on a souvent sous la main après une enquête de terrain :
 |---|---|
 | Points → emprises | Une emprise par point de terrain, avec SAM. Les points voisins servent d'exemples négatifs pour ne pas fusionner deux bâtiments. |
 | Clic | Un clic au centre d'un toit ajoute son emprise ; clic droit pour annuler. Sert à compléter les points restés sans emprise. |
-| Automatique | Détection sans points, sur une emprise, avec le modèle BatiScan Sahel ou tout modèle de segmentation ONNX au format [Deepness](https://qgis-plugin-deepness.readthedocs.io/). |
+| Automatique | Détection sans points, sur une emprise, avec le modèle Sahel 1, intégré à l'extension, ou tout modèle de segmentation ONNX au format [Deepness](https://qgis-plugin-deepness.readthedocs.io/). |
 | Contrôle | Compare points et emprises : taux de couverture, emprises sans point, emprises qui regroupent plusieurs points. |
 | Entraînement | Exporte des vignettes image + masque (GeoTIFF) à partir d'emprises vérifiées, pour entraîner un modèle propre à votre zone. |
-| Modèles | Téléchargement des modèles, ajout d'un modèle .onnx personnel, choix CPU/GPU. |
+| Modèles | Liste des modèles, téléchargement des modèles SAM et RAMP, ajout d'un modèle .onnx personnel, choix CPU/GPU. |
 
 L'image peut être un GeoTIFF (orthophoto, drone, Pléiades...) ou un fond XYZ/WMS déjà chargé dans QGIS.
 
@@ -120,10 +120,8 @@ Réglages utiles : la résolution de travail (0,3 m/px convient aux fonds Google
 |---|---|---|---|
 | MobileSAM quantifié | points et clic | 11 Mo | Apache-2.0 |
 | SAM ViT-B quantifié | points et clic, plus précis et plus lent | 75 Mo | Apache-2.0 |
-| BatiScan Sahel v6 | détection automatique, bâti rural et bourgs du Sahel | 98 Mo | recherche et tests, non commercial |
-| BatiScan Sahel v2 | ancienne version | 98 Mo | recherche et tests, non commercial |
-| BatiScan Sahel v1 | ancienne version | 98 Mo | recherche et tests, non commercial |
-| Bâtiments RAMP (Deepness) | détection automatique, générique | 82 Mo | voir le Model ZOO de Deepness |
+| Sahel 1 (BatiScan v6) | détection automatique : villages, bourgs et villes, maisons accolées séparées | 25 Mo, intégré à l'extension (int8) | recherche et tests, non commercial |
+| RAMP (Deepness) | détection automatique, grands bâtiments isolés | 82 Mo, à télécharger | voir le Model ZOO de Deepness |
 
 Les modèles SAM viennent de [vietanhdev/segment-anything-onnx-models](https://huggingface.co/vietanhdev/segment-anything-onnx-models). Tout modèle de segmentation ONNX contenant les métadonnées Deepness (`model_type`, `class_names`, `resolution`, `tiles_size`, `seg_thresh`...) peut être ajouté depuis l'onglet Modèles.
 

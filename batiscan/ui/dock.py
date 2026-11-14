@@ -165,8 +165,9 @@ class DockBatiScan(QDockWidget):
         ch = models.chemins(modele)
         if ch:
             return ch
-        if modele.get("perso"):
-            self._msg("Fichier introuvable : " + modele["fichier"], Qgis.MessageLevel.Warning)
+        if modele.get("perso") or modele.get("integre"):
+            self._msg("Fichier du modèle introuvable : réinstallez le plugin ou choisissez un autre modèle.",
+                      Qgis.MessageLevel.Warning)
             return None
         rep = QMessageBox.question(
             self, "BatiScan",
@@ -357,12 +358,13 @@ class DockBatiScan(QDockWidget):
     def _onglet_auto(self):
         w = QWidget()
         f = QFormLayout(w)
-        aide = QLabel("Détection sans points sur une emprise. Le modèle « Sahel 1 » (BatiScan v6) a été "
+        aide = QLabel("Détection sans points sur une emprise. Le modèle « Sahel 1 » a été "
                       "entraîné sur des villages du Mali et des emprises ouvertes d'Afrique de l'Ouest "
                       "(30 cm/px), des cases rondes aux toits en tôle. Les objets au score faible ou de moins "
                       "de 20 m² sont marqués « à vérifier » : environ un sur trois est une fausse détection, "
                       "à relire sans les supprimer en bloc. Le champ « controle » donne la raison. "
-                      "Tout modèle ONNX au format Deepness peut aussi être ajouté "
+                      "Le modèle « Orthophoto » convient aux quartiers denses de maisons en tôle, sur orthophoto "
+                      "de drone ou image satellite. Tout modèle ONNX au format Deepness peut aussi être ajouté "
                       "(onglet Modèles).")
         aide.setWordWrap(True)
         f.addRow(aide)
@@ -836,7 +838,7 @@ class DockBatiScan(QDockWidget):
     def _remplir_liste_modeles(self):
         self.liste_modeles.clear()
         for m in models.tous():
-            etat = "installé" if models.chemins(m) else "à télécharger"
+            etat = "intégré" if m.get("integre") else ("installé" if models.chemins(m) else "à télécharger")
             usage = "pointage par clic" if m["type"] == "sam" else "détection automatique"
             it = QListWidgetItem(f"{m['nom']} | {usage} | {etat}")
             if m.get("description"):
@@ -859,7 +861,7 @@ class DockBatiScan(QDockWidget):
         it = self.liste_modeles.currentItem()
         if it:
             m = it.data(256)
-            if not m.get("perso") and not models.chemins(m):
+            if m.get("url") and not models.chemins(m):
                 self._telecharger(m)
 
     def _telecharger(self, modele):

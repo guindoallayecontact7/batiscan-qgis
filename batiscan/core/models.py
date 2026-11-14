@@ -27,14 +27,19 @@ CATALOGUE = [
         "licence": "Apache-2.0",
     },
     {
-        "id": "batiscan_sahel_v6",
+        "id": "sahel1",
         "nom": "Sahel 1",
-        "description": "BatiScan v6, modèle recommandé : villages, bourgs et villes, sépare les maisons accolées (30 cm/px, 98 Mo)",
+        "description": "Modèle recommandé : villages, bourgs et villes, sépare les maisons accolées (30 cm/px, intégré au plugin)",
         "type": "segmenteur",
-        "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.5.0/batiscan_sahel_v6.onnx",
-        "fichier": "batiscan_sahel_v6.onnx",
-        "sha256": "38f1daf1bfce5d55c6e5d4aebc8b0f4e60f5345677ab3c8625816d8854dd8257",  # pragma: allowlist secret (empreinte publique du modèle)
-        "taille_mo": 98,
+        "integre": "sahel1.onnx",
+        "licence": "recherche et tests, non commercial",
+    },
+    {
+        "id": "orthophoto",
+        "nom": "Orthophoto",
+        "description": "Quartiers denses de maisons en tôle, sur orthophoto de drone ou image satellite (30 cm/px, intégré au plugin)",
+        "type": "segmenteur",
+        "integre": "orthophoto.onnx",
         "licence": "recherche et tests, non commercial",
     },
     {
@@ -50,6 +55,8 @@ CATALOGUE = [
 ]
 
 _CLE_PERSO = "batiscan/modeles_perso"
+# modèles livrés avec le plugin : ils ne se téléchargent pas
+DOSSIER_INTEGRES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "modeles")
 
 
 def dossier_modeles():
@@ -73,6 +80,9 @@ def _yaml_simple(path):
 
 def chemins(modele):
     """Fichiers locaux d'un modèle, ou None s'il n'est pas installé."""
+    if modele.get("integre"):
+        p = os.path.join(DOSSIER_INTEGRES, modele["integre"])
+        return {"onnx": p} if os.path.isfile(p) else None
     if modele.get("perso"):
         return {"onnx": modele["fichier"]} if os.path.exists(modele["fichier"]) else None
     d = os.path.join(dossier_modeles(), modele["id"])
@@ -148,7 +158,8 @@ def _nom_perso(p):
         return nom + " (fichier introuvable)"
     for m in CATALOGUE:
         if m["type"] == "segmenteur":
-            q = os.path.join(dossier_modeles(), m["id"], m["fichier"])
+            ch = chemins(m)
+            q = ch["onnx"] if ch else ""
             if os.path.isfile(q) and os.path.getsize(q) == taille and _meme_fichier(p, q):
                 return f"{nom} : copie de « {m['nom'].split(' :')[0]} »"
     return nom + " : ajouté à la main, non mesuré"
@@ -178,4 +189,6 @@ def retirer_modele_perso(path):
 
 
 def tous(type_=None):
-    return [m for m in CATALOGUE + modeles_perso() if type_ is None or m["type"] == type_]
+    # un modèle intégré absent du paquet n'est pas proposé (il ne se télécharge pas)
+    return [m for m in CATALOGUE + modeles_perso() if (type_ is None or m["type"] == type_)
+            and not (m.get("integre") and not chemins(m))]
