@@ -28,7 +28,8 @@ CATALOGUE = [
     },
     {
         "id": "batiscan_sahel_v6",
-        "nom": "Bâti sahélien · BatiScan v6 (recommandé) : villages, bourgs et villes, sépare les maisons accolées (30 cm/px, 98 Mo)",
+        "nom": "Sahel 1",
+        "description": "BatiScan v6, modèle recommandé : villages, bourgs et villes, sépare les maisons accolées (30 cm/px, 98 Mo)",
         "type": "segmenteur",
         "url": "https://github.com/guindoallayecontact7/batiscan-qgis/releases/download/v0.5.0/batiscan_sahel_v6.onnx",
         "fichier": "batiscan_sahel_v6.onnx",
@@ -38,7 +39,8 @@ CATALOGUE = [
     },
     {
         "id": "deepness_ramp",
-        "nom": "Bâti général · RAMP (Deepness) : grands bâtiments isolés, fusionne les maisons accolées (50 cm/px, 82 Mo)",
+        "nom": "RAMP (Deepness)",
+        "description": "Bâti général : grands bâtiments isolés, fusionne les maisons accolées (50 cm/px, 82 Mo)",
         "type": "segmenteur",
         "url": "https://chmura.put.poznan.pl/s/MwhgQNhyQF3fuBs/download",
         "fichier": "buildings_ramp.onnx",

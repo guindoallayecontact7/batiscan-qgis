@@ -136,6 +136,8 @@ class DockBatiScan(QDockWidget):
         c = QComboBox()
         for m in models.tous(type_):
             c.addItem(m["nom"], m)
+            if m.get("description"):
+                c.setItemData(c.count() - 1, m["description"], Qt.ItemDataRole.ToolTipRole)
         return c
 
     def _rafraichir_combos(self):
@@ -145,6 +147,8 @@ class DockBatiScan(QDockWidget):
             c.clear()
             for m in models.tous(t):
                 c.addItem(m["nom"], m)
+                if m.get("description"):
+                    c.setItemData(c.count() - 1, m["description"], Qt.ItemDataRole.ToolTipRole)
             i = c.findText(actuel)
             if i >= 0:
                 c.setCurrentIndex(i)
@@ -353,7 +357,7 @@ class DockBatiScan(QDockWidget):
     def _onglet_auto(self):
         w = QWidget()
         f = QFormLayout(w)
-        aide = QLabel("Détection sans points sur une emprise. Le modèle « BatiScan v6 » a été "
+        aide = QLabel("Détection sans points sur une emprise. Le modèle « Sahel 1 » (BatiScan v6) a été "
                       "entraîné sur des villages du Mali et des emprises ouvertes d'Afrique de l'Ouest "
                       "(30 cm/px), des cases rondes aux toits en tôle. Les objets au score faible ou de moins "
                       "de 20 m² sont marqués « à vérifier » : environ un sur trois est une fausse détection, "
@@ -835,6 +839,8 @@ class DockBatiScan(QDockWidget):
             etat = "installé" if models.chemins(m) else "à télécharger"
             usage = "pointage par clic" if m["type"] == "sam" else "détection automatique"
             it = QListWidgetItem(f"{m['nom']} | {usage} | {etat}")
+            if m.get("description"):
+                it.setToolTip(m["description"])
             it.setData(256, m)
             self.liste_modeles.addItem(it)
 
