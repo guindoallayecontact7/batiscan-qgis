@@ -7,6 +7,8 @@ import zipfile
 
 from qgis.core import QgsApplication, QgsSettings
 
+from . import prive
+
 HF = "https://huggingface.co/vietanhdev/segment-anything-onnx-models/resolve/main/"
 
 CATALOGUE = [
@@ -190,5 +192,5 @@ def retirer_modele_perso(path):
 
 def tous(type_=None):
     # un modèle intégré absent du paquet n'est pas proposé (il ne se télécharge pas)
-    return [m for m in CATALOGUE + modeles_perso() if (type_ is None or m["type"] == type_)
+    return [m for m in CATALOGUE + prive.catalogue() + modeles_perso() if (type_ is None or m["type"] == type_)
             and not (m.get("integre") and not chemins(m))]

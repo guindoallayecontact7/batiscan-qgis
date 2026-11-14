@@ -21,7 +21,7 @@ from qgis.core import (
     QgsSingleSymbolRenderer,
     QgsWkbTypes,
 )
-from qgis.gui import QgsExtentWidget, QgsFieldComboBox, QgsFileWidget, QgsMapLayerComboBox
+from qgis.gui import QgsAuthConfigSelect, QgsExtentWidget, QgsFieldComboBox, QgsFileWidget, QgsMapLayerComboBox
 from qgis.PyQt import sip
 from qgis.PyQt.QtCore import QMetaType, Qt, QUrl
 from qgis.PyQt.QtGui import QDesktopServices
@@ -46,7 +46,7 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
-from ..core import models, qc
+from ..core import models, prive, qc
 from ..core.image_source import SourceImage
 from ..core.localites import champ_nom, exporter_tableau, points_depuis_tableau
 from ..core.localites import ouvrir as ouvrir_localites
@@ -173,7 +173,7 @@ class DockBatiScan(QDockWidget):
             self, "BatiScan",
             f"Le modèle « {modele['nom']} » n'est pas encore installé "
             f"(environ {modele['taille_mo']} Mo, licence {modele['licence']}).\n"
-            f"Source : {modele['url']}\n\nLe télécharger maintenant ?")
+            f"Source : {modele.get('url') or 'dépôt privé ' + modele.get('depot', '')}\n\nLe télécharger maintenant ?")
         if rep == QMessageBox.StandardButton.Yes:
             self._telecharger(modele)
         return None
@@ -825,6 +825,13 @@ class DockBatiScan(QDockWidget):
         for b in (b1, b2, b4, b3):
             h.addWidget(b)
         v.addLayout(h)
+        if prive.actif():
+            v.addWidget(QLabel("Édition personnelle : accès au dépôt privé des modèles (configuration "
+                               "« Basic », jeton GitHub en lecture seule dans le mot de passe) :"))
+            acces = QgsAuthConfigSelect(w)
+            acces.setConfigId(prive.authcfg())
+            acces.selectedConfigIdChanged.connect(prive.definir_authcfg)
+            v.addWidget(acces)
         self.cb_gpu = QCheckBox("Utiliser le GPU si possible")
         self.cb_gpu.setChecked(self._gpu())
         self.cb_gpu.toggled.connect(lambda x: QgsSettings().setValue("batiscan/gpu", x))
@@ -838,7 +845,8 @@ class DockBatiScan(QDockWidget):
     def _remplir_liste_modeles(self):
         self.liste_modeles.clear()
         for m in models.tous():
-            etat = "intégré" if m.get("integre") else ("installé" if models.chemins(m) else "à télécharger")
+            etat = "intégré" if m.get("integre") else ("installé" if models.chemins(m) else
+                                                        "à télécharger (privé)" if m.get("prive") else "à télécharger")
             usage = "pointage par clic" if m["type"] == "sam" else "détection automatique"
             it = QListWidgetItem(f"{m['nom']} | {usage} | {etat}")
             if m.get("description"):
@@ -861,11 +869,14 @@ class DockBatiScan(QDockWidget):
         it = self.liste_modeles.currentItem()
         if it:
             m = it.data(256)
-            if m.get("url") and not models.chemins(m):
+            if (m.get("url") or m.get("prive")) and not models.chemins(m):
                 self._telecharger(m)
 
     def _telecharger(self, modele):
         if modele["id"] in self._telechargements:
+            return
+        if modele.get("prive"):
+            self._telecharger_prive(modele)
             return
         fd, tmp = tempfile.mkstemp(suffix=".part", dir=models.dossier_modeles())
         os.close(fd)
@@ -895,6 +906,29 @@ class DockBatiScan(QDockWidget):
         self._telechargements[modele["id"]] = dl
         dl.startDownload()
         self._msg(f"Téléchargement de {modele['nom']} en cours…")
+
+    def _telecharger_prive(self, modele):
+        try:
+            tache = prive.TacheTelechargementPrive(modele, models.dossier_modeles())
+        except ValueError as exc:
+            self._msg(f"Téléchargement impossible : {exc}", Qgis.MessageLevel.Warning, 10)
+            return
+
+        def fini():
+            self._telechargements.pop(modele["id"], None)
+            self._msg(f"Modèle installé : {modele['nom']}", Qgis.MessageLevel.Success)
+            self._rafraichir_combos()
+            self._remplir_liste_modeles()
+
+        def echec():
+            self._telechargements.pop(modele["id"], None)
+            self._msg("Téléchargement échoué : " + (tache.erreur or "annulé"), Qgis.MessageLevel.Critical, 10)
+
+        tache.taskCompleted.connect(fini)
+        tache.taskTerminated.connect(echec)
+        self._telechargements[modele["id"]] = tache
+        QgsApplication.taskManager().addTask(tache)
+        self._msg(f"Téléchargement de {modele['nom']} depuis le dépôt privé en cours…")
 
     def _ajouter_perso(self):
         path, _ = QFileDialog.getOpenFileName(self, "Modèle de segmentation ONNX", "", "ONNX (*.onnx)")

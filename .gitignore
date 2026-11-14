@@ -5,3 +5,4 @@ dist/
 *.zip
 .vscode/
 .idea/
+edition_personnelle.json
