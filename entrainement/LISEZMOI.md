@@ -12,6 +12,8 @@ Ces scripts transforment des points de bâtiments relevés sur le terrain en un 
 | 3. Entraînement U-Net | `03_entrainer.py` | Python avec PyTorch et GPU |
 | 4. Export ONNX avec métadonnées Deepness | `04_exporter_onnx.py` | Python avec PyTorch |
 | 5. Détection sur un village test et comparaison aux points | `05_evaluer.py` | Python de QGIS |
+| Orthophoto drone : vignettes à partir de bâtiments dessinés à la main dans des carrés de 100 m | `30_jeu_abidjan.py` | Python de QGIS |
+| Orthophoto drone : score par objet (IoU 0,5 et couverture 30 %) sur les carrés de test | `31_score_abidjan.py` | Python de QGIS |
 | Recalage de masques décalés sur les prédictions d'un modèle | `06_recaler.py` | Python avec PyTorch |
 | Mesure par village, au pixel et par bâtiment | `07_mesurer.py` | Python avec PyTorch |
 | Repérage des fausses détections sur un jeu | `12_negatifs.py` | Python avec PyTorch |
